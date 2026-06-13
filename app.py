@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot (With Bulletproof Threaded Port Fix)
+Highrise Room Management Bot (With Threaded Port Scan Fix & Auto-Reconnect Loop)
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Uses Python threading to run a completely separate HTTP server on port 10000.
+Fixes: Loops the execution block with 15s cooling windows to prevent ghost drops.
 """
 
 import sys
@@ -16,16 +16,16 @@ from typing import Union
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
-# --- 🚀 BULLETPROOF WEB SERVER THREAD ---
+# --- 🚀 RECON-SAFE WEB PORT THREAD ---
 class SilentServer(SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"Bot hosting is active and live 24/7.")
+        self.wfile.write(b"Bot hosting engine active 24/7.")
 
     def log_message(self, format, *args):
-        pass # Suppress logging to keep Render terminal perfectly clean
+        pass
 
 def start_background_web_server():
     try:
@@ -36,12 +36,12 @@ def start_background_web_server():
     except Exception as e:
         print(f"[ERROR CATCH] Background web thread failed to bind: {e}")
 
-# Launch the fake port server on an independent system thread immediately on script boot
+# Fire up the port server immediately on a parallel system thread
 web_thread = threading.Thread(target=start_background_web_server, daemon=True)
 web_thread.start()
 
 
-# --- 🤖 HIGHRISE BOT CORE CORE ENGINE ---
+# --- 🤖 HIGHRISE BOT CORE ENGINE ---
 class SecurityRoomBot(BaseBot):
     def __init__(self):
         super().__init__()
@@ -310,16 +310,27 @@ class SecurityRoomBot(BaseBot):
             else:
                 await self.highrise.send_whisper(user.id, "❌ Access Denied.")
 
-# --- MAIN GATEWAY EXECUTION ---
-if __name__ == "__main__":
+# --- AUTOMATED CONTINUOUS RECONNECT GATEWAY ---
+async def start_bot_loop():
     ROOM_ID = "6a28b5b000b6151bd4c9641e"
     API_TOKEN = "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92"
     
     from highrise.__main__ import main, BotDefinition
-    definitions = [BotDefinition(SecurityRoomBot(), ROOM_ID, API_TOKEN)]
     
+    while True:
+        print("[SYSTEM LOG] Launching core Highrise API connection sequence...")
+        try:
+            definitions = [BotDefinition(SecurityRoomBot(), ROOM_ID, API_TOKEN)]
+            await main(definitions=definitions)
+        except Exception as err:
+            print(f"\n[NETWORK ALERT] Highrise gateway disconnected or closed by server: {err}")
+        
+        print("[SYSTEM LOG] Room connection dropped or room sleeping. Retrying handshake in 15 seconds...")
+        await asyncio.sleep(15)
+
+if __name__ == "__main__":
     try:
-        asyncio.run(main(definitions=definitions))
+        asyncio.run(start_bot_loop())
     except KeyboardInterrupt:
         print("\n[SYSTEM LOG] Bot disconnected cleanly.")
     except Exception:
