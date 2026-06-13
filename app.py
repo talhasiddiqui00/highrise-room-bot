@@ -2,7 +2,7 @@
 Highrise Room Management Bot
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Updated !down spawn coordinates to ground floor matrix nodes (27.0, 0.5, 34.0).
+Fixes: Restructured !bal to whisper privately to owner. Added on_whisper listener to deflect direct messages.
 """
 
 import sys
@@ -101,6 +101,17 @@ class SecurityRoomBot(BaseBot):
         except Exception as e:
             print(f"[ERROR CATCH] Failed sending direct welcome instructions: {e}")
 
+    async def on_whisper(self, user: User, message: str) -> None:
+        """Triggers when someone whispers or sends a private text block directly to the bot."""
+        if user.id == self.bot_id:
+            return
+            
+        try:
+            # Redirect private conversations or outside DMs back into the active public chat space
+            await self.highrise.send_whisper(user.id, "Come to the room if you want to talk or command with me!")
+        except Exception as e:
+            print(f"[ERROR CATCH] Direct message incoming sweep responder failed: {e}")
+
     async def on_tip(self, sender: User, receiver: User, tip: Union[CurrencyItem, Item]) -> None:
         """Listens to all incoming gold transfers (Direct bot tips + Room Tip Jars)."""
         if sender.id == self.bot_id:
@@ -149,7 +160,8 @@ class SecurityRoomBot(BaseBot):
                         if item.type == "gold":
                             bot_gold = item.amount
                             break
-                    await self.highrise.chat(f"💰 [VAULT BALANCE] {bot_gold} gold remains in reserve.")
+                    # CHANGED: Sent as direct whisper to owner only to preserve security
+                    await self.highrise.send_whisper(user.id, f"💰 [VAULT BALANCE] {bot_gold} gold remains securely in reserve.")
                 except Exception as e:
                     print(f"[ERROR CATCH] Balance validation response timeout: {e}")
                     
@@ -301,7 +313,6 @@ class SecurityRoomBot(BaseBot):
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
                 try:
                     await self.highrise.chat(f"⬇️ Sending @{user.username} back down to the ground floor corner!")
-                    # Exact position updated to target destination coordinates (27.0, 0.5, 34.0)
                     await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
                 except Exception as tp_down_err:
                     print(f"[ERROR CATCH] VIP Downward Teleportation structure failure: {tp_down_err}")
