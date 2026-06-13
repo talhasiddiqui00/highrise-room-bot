@@ -2,7 +2,7 @@
 Highrise Room Management Bot
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Combined greeting message into a single block and linked it to on_user_join.
+Fixes: Updated !down spawn coordinates to ground floor matrix nodes (27.0, 0.5, 34.0).
 """
 
 import sys
@@ -301,7 +301,8 @@ class SecurityRoomBot(BaseBot):
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
                 try:
                     await self.highrise.chat(f"⬇️ Sending @{user.username} back down to the ground floor corner!")
-                    await self.highrise.teleport(user.id, Position(10.0, 4.5, 10.0, facing="FrontRight"))
+                    # Exact position updated to target destination coordinates (27.0, 0.5, 34.0)
+                    await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
                 except Exception as tp_down_err:
                     print(f"[ERROR CATCH] VIP Downward Teleportation structure failure: {tp_down_err}")
             else:
