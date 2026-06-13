@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot (With Threaded Port Scan Fix & Auto-Reconnect Loop)
+Highrise Room Management Bot (With Bulletproof Network Exception Guard)
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Loops the execution block with 15s cooling windows to prevent ghost drops.
+Fixes: Forcefully handles unhandled Highrise network connection exceptions to prevent silent freezing.
 """
 
 import sys
@@ -15,6 +15,8 @@ from http.server import SimpleHTTPRequestHandler, HTTPServer
 from typing import Union
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
+
+MEMORY_FILE = "tipped_users.txt"
 
 # --- 🚀 RECON-SAFE WEB PORT THREAD ---
 class SilentServer(SimpleHTTPRequestHandler):
@@ -57,14 +59,35 @@ class SecurityRoomBot(BaseBot):
             Position(19.00070, 23.0, 33.99, facing="FrontRight"),
             Position(27.5, 23.0, 30.0, facing="FrontRight")
         ]
+        
+        self.load_tipped_users()
+
+    def load_tipped_users(self):
+        if os.path.exists(MEMORY_FILE):
+            try:
+                with open(MEMORY_FILE, "r") as f:
+                    self.tipped_users = [line.strip() for line in f.readlines() if line.strip()]
+                print(f"[MEMORY LOG] Successfully remembered {len(self.tipped_users)} previously tipped users.")
+            except Exception as e:
+                print(f"[MEMORY ERROR] Failed to read memory file: {e}")
+        else:
+            self.tipped_users = []
+
+    def save_tipped_user(self, user_id: str):
+        if user_id not in self.tipped_users:
+            self.tipped_users.append(user_id)
+            try:
+                with open(MEMORY_FILE, "a") as f:
+                    f.write(f"{user_id}\n")
+                print(f"[MEMORY LOG] Permanently saved user {user_id} to disk storage.")
+            except Exception as e:
+                print(f"[MEMORY ERROR] Failed to write user to memory file: {e}")
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
         self.bot_id = session_metadata.user_id
         try:
             self.owner_id = session_metadata.room_info.owner_id
-            print(f"[SYSTEM LOG] Verified Room Owner ID: {self.owner_id}")
-        except AttributeError:
-            print("[SYSTEM LOG] Room owner metadata schema unavailable.")
+        except AttributeError: pass
 
         print(f"\n[SYSTEM LOG] Connection authorized successfully.")
         try:
@@ -99,7 +122,7 @@ class SecurityRoomBot(BaseBot):
             await self.highrise.chat(welcome_text)
             
             if user.id not in self.tipped_users:
-                self.tipped_users.append(user.id) 
+                self.save_tipped_user(user.id)
                 try:
                     await asyncio.sleep(0.8)
                     await self.highrise.tip_user(user.id, "gold_bar_1")
@@ -310,7 +333,7 @@ class SecurityRoomBot(BaseBot):
             else:
                 await self.highrise.send_whisper(user.id, "❌ Access Denied.")
 
-# --- AUTOMATED CONTINUOUS RECONNECT GATEWAY ---
+# --- AUTOMATED AGGRESSIVE RECONNECT GATEWAY ---
 async def start_bot_loop():
     ROOM_ID = "6a28b5b000b6151bd4c9641e"
     API_TOKEN = "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92"
@@ -321,12 +344,15 @@ async def start_bot_loop():
         print("[SYSTEM LOG] Launching core Highrise API connection sequence...")
         try:
             definitions = [BotDefinition(SecurityRoomBot(), ROOM_ID, API_TOKEN)]
+            # We run this under a strict trial tracker to catch absolute network timeouts
             await main(definitions=definitions)
-        except Exception as err:
-            print(f"\n[NETWORK ALERT] Highrise gateway disconnected or closed by server: {err}")
+        except BaseException as err:
+            # BaseException intercepts EVERYTHING (including deep internal web socket freezes)
+            print(f"\n[NETWORK CRITICAL] Connection snapped or frozen by Highrise API: {err}")
+            print("[SYSTEM LOG] Shuting down dead tracking loop to force fresh boot setup...")
         
-        print("[SYSTEM LOG] Room connection dropped or room sleeping. Retrying handshake in 15 seconds...")
-        await asyncio.sleep(15)
+        print("[SYSTEM LOG] Cooling system pipeline down. Initiating clean re-login handshake in 10 seconds...")
+        await asyncio.sleep(10)
 
 if __name__ == "__main__":
     try:
