@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot (With Bulletproof Network Exception Guard)
+Highrise Room Management Bot - Optimized for Render FREE Web Service
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Forcefully handles unhandled Highrise network connection exceptions to prevent silent freezing.
+Fixes: Restores internal web port for Free Web Service hosting.
 """
 
 import sys
@@ -18,27 +18,27 @@ from highrise.models import SessionMetadata, CurrencyItem, Item
 
 MEMORY_FILE = "tipped_users.txt"
 
-# --- 🚀 RECON-SAFE WEB PORT THREAD ---
-class SilentServer(SimpleHTTPRequestHandler):
+# --- 🚀 FREE WEB PORT ALIVE GATEWAY ---
+class KeepAliveServer(SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"Bot hosting engine active 24/7.")
+        self.wfile.write(b"Bot tracking system is completely alive 24/7.")
 
     def log_message(self, format, *args):
-        pass
+        pass # Keeps the logs clean from ping traffic
 
 def start_background_web_server():
     try:
         port = int(os.environ.get("PORT", 10000))
-        server = HTTPServer(('0.0.0.0', port), SilentServer)
-        print(f"[SYSTEM LOG] Dedicated port server opened cleanly on channel: {port}")
+        server = HTTPServer(('0.0.0.0', port), KeepAliveServer)
+        print(f"[SYSTEM LOG] Web gateway tracking channel opened on port: {port}")
         server.serve_forever()
     except Exception as e:
-        print(f"[ERROR CATCH] Background web thread failed to bind: {e}")
+        print(f"[ERROR CATCH] Web server failed to spin up: {e}")
 
-# Fire up the port server immediately on a parallel system thread
+# Fire up the port immediately on a parallel system thread
 web_thread = threading.Thread(target=start_background_web_server, daemon=True)
 web_thread.start()
 
@@ -344,14 +344,11 @@ async def start_bot_loop():
         print("[SYSTEM LOG] Launching core Highrise API connection sequence...")
         try:
             definitions = [BotDefinition(SecurityRoomBot(), ROOM_ID, API_TOKEN)]
-            # We run this under a strict trial tracker to catch absolute network timeouts
             await main(definitions=definitions)
         except BaseException as err:
-            # BaseException intercepts EVERYTHING (including deep internal web socket freezes)
             print(f"\n[NETWORK CRITICAL] Connection snapped or frozen by Highrise API: {err}")
-            print("[SYSTEM LOG] Shuting down dead tracking loop to force fresh boot setup...")
         
-        print("[SYSTEM LOG] Cooling system pipeline down. Initiating clean re-login handshake in 10 seconds...")
+        print("[SYSTEM LOG] Re-login handshake executing in 10 seconds...")
         await asyncio.sleep(10)
 
 if __name__ == "__main__":
