@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot - Optimized for Render FREE Web Service
+Highrise Room Management Bot - Secret Whisper & Cron-Watchdog Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Restores internal web port for Free Web Service hosting.
+Fixes: Converted command responses to private whispers for all users, VIPs, and Owner.
 """
 
 import sys
@@ -11,12 +11,14 @@ import random
 import os
 import traceback
 import threading
+import time
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from typing import Union
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
 MEMORY_FILE = "tipped_users.txt"
+LAST_NETWORK_ACTIVITY = time.time()  
 
 # --- 🚀 FREE WEB PORT ALIVE GATEWAY ---
 class KeepAliveServer(SimpleHTTPRequestHandler):
@@ -27,7 +29,7 @@ class KeepAliveServer(SimpleHTTPRequestHandler):
         self.wfile.write(b"Bot tracking system is completely alive 24/7.")
 
     def log_message(self, format, *args):
-        pass # Keeps the logs clean from ping traffic
+        pass 
 
 def start_background_web_server():
     try:
@@ -38,7 +40,6 @@ def start_background_web_server():
     except Exception as e:
         print(f"[ERROR CATCH] Web server failed to spin up: {e}")
 
-# Fire up the port immediately on a parallel system thread
 web_thread = threading.Thread(target=start_background_web_server, daemon=True)
 web_thread.start()
 
@@ -84,6 +85,8 @@ class SecurityRoomBot(BaseBot):
                 print(f"[MEMORY ERROR] Failed to write user to memory file: {e}")
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
+        global LAST_NETWORK_ACTIVITY
+        LAST_NETWORK_ACTIVITY = time.time()
         self.bot_id = session_metadata.user_id
         try:
             self.owner_id = session_metadata.room_info.owner_id
@@ -93,21 +96,36 @@ class SecurityRoomBot(BaseBot):
         try:
             await self.highrise.chat("✨ Secure Room Bot is now online and active! ✨")
             asyncio.create_task(self.start_announcement_loop())
+            asyncio.create_task(self.start_heartbeat_watchdog())  
         except Exception as e:
             print(f"[ERROR CATCH] Core initialization failed: {e}")
 
+    async def start_heartbeat_watchdog(self) -> None:
+        global LAST_NETWORK_ACTIVITY
+        while True:
+            await asyncio.sleep(60)  
+            idle_duration = time.time() - LAST_NETWORK_ACTIVITY
+            if idle_duration > 600:  # Matches your 5-min cron structure perfectly
+                print("\n[WATCHDOG CRITICAL] Highrise connection has frozen silently! Forcing termination...")
+                sys.exit(1)
+
     async def start_announcement_loop(self) -> None:
+        global LAST_NETWORK_ACTIVITY
         while True:
             try:
-                await asyncio.sleep(300)
+                await asyncio.sleep(240)  # Fires every 4 minutes to guarantee the watchdog stays reset
                 await self.highrise.chat(
                     "📢 Tip 500g to become permanent VIP! Invite your friends to this public hangout place "
                     "and have tips and fun. Apply for MOD DM @sadi_key ✨"
                 )
+                LAST_NETWORK_ACTIVITY = time.time()  
             except Exception as e:
                 print(f"[ERROR CATCH] Announcement skipped: {e}")
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
+        global LAST_NETWORK_ACTIVITY
+        LAST_NETWORK_ACTIVITY = time.time()
+        
         if user.id == self.bot_id or "bot" in user.username.lower():
             return
         if user.username.lower() == self.owner_username.lower():
@@ -142,6 +160,8 @@ class SecurityRoomBot(BaseBot):
             print(f"[ERROR CATCH] Failed sending direct welcome instructions: {e}")
 
     async def on_whisper(self, user: User, message: str) -> None:
+        global LAST_NETWORK_ACTIVITY
+        LAST_NETWORK_ACTIVITY = time.time()
         if user.id == self.bot_id:
             return
         try:
@@ -150,6 +170,8 @@ class SecurityRoomBot(BaseBot):
             print(f"[ERROR CATCH] Whisper responder failed: {e}")
 
     async def on_tip(self, sender: User, receiver: User, tip: Union[CurrencyItem, Item]) -> None:
+        global LAST_NETWORK_ACTIVITY
+        LAST_NETWORK_ACTIVITY = time.time()
         if sender.id == self.bot_id:
             return
 
@@ -181,9 +203,13 @@ class SecurityRoomBot(BaseBot):
                 print(f"[ERROR CATCH] Core gratitude engine failed: {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
+        global LAST_NETWORK_ACTIVITY
+        LAST_NETWORK_ACTIVITY = time.time()
+        
         clean_message = message.lower().strip().replace(" ", "")
         print(f"[ROOM CHAT] {user.username}: {message}") 
         
+        # --- 👑 OWNER UTILITY COMMANDS (WHISPER RESPONSES) ---
         if user.username.lower() == self.owner_username.lower():
             if message.lower().strip() == "!bal":
                 try:
@@ -203,7 +229,7 @@ class SecurityRoomBot(BaseBot):
                     if len(parts) > 1:
                         raw_amount = parts[1].replace("g", "")
                         if raw_amount in ["1", "5", "10", "50", "100", "500", "1k", "5000", "10k"]:
-                            await self.highrise.chat(f"💸 [WITHDRAWAL] Transferring {raw_amount}g bar to Owner @{self.owner_username}...")
+                            await self.highrise.send_whisper(user.id, f"💸 [WITHDRAWAL] Executing {raw_amount}g bar transfer to your inventory...")
                             await self.highrise.tip_user(user.id, f"gold_bar_{raw_amount}")
                         else:
                             await self.highrise.send_whisper(user.id, "❌ Error: Use a valid Highrise gold bar size.")
@@ -225,10 +251,10 @@ class SecurityRoomBot(BaseBot):
                                     user_id_found = room_user.id
                                     break
                             if user_id_found:
-                                await self.highrise.chat(f"🎁 [GIFT] Gifting {amount_str}g straight to @{target_user}!")
+                                await self.highrise.send_whisper(user.id, f"🎁 [GIFT SENT] Transferred {amount_str}g straight to @{target_user}!")
                                 await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
                             else:
-                                await self.highrise.send_whisper(user.id, f"❌ User @{target_user} not found.")
+                                await self.highrise.send_whisper(user.id, f"❌ User @{target_user} not found in room.")
                 except Exception as e:
                     print(f"[ERROR CATCH] Gift failed: {e}")
 
@@ -239,10 +265,10 @@ class SecurityRoomBot(BaseBot):
                         amount_str = parts[1].replace("g", "")
                         valid_bars = ["1", "5", "10", "50", "100", "500", "1k", "5000", "10k"]
                         if amount_str not in valid_bars:
-                            await self.highrise.chat("❌ Choose a valid bar unit size.")
+                            await self.highrise.send_whisper(user.id, "❌ Choose a valid bar unit size.")
                             return
                         
-                        await self.highrise.chat(f"📣 Distributing {amount_str}g to room...")
+                        await self.highrise.send_whisper(user.id, f"📣 Commencing room-wide distribution of {amount_str}g...")
                         room_data = await self.highrise.get_room_users()
                         for room_user, pos in room_data.content:
                             if room_user.id == self.bot_id: continue
@@ -250,7 +276,6 @@ class SecurityRoomBot(BaseBot):
                                 try:
                                     self.giveall_history.add(room_user.id)
                                     await self.highrise.tip_user(room_user.id, f"gold_bar_{amount_str}")
-                                    await self.highrise.chat(f"🎁 Sent {amount_str}g to @{room_user.username}!")
                                     await asyncio.sleep(0.8)
                                 except Exception: pass
                 except Exception as e:
@@ -270,7 +295,7 @@ class SecurityRoomBot(BaseBot):
                         if user_id_found:
                             if user_id_found not in self.vip_users:
                                 self.vip_users.append(user_id_found)
-                            await self.highrise.chat(f"👑 @{target_user} has been promoted to Permanent VIP! 🚀")
+                            await self.highrise.send_whisper(user.id, f"👑 @{target_user} promoted to Permanent VIP successfully.")
                             await self.send_vip_welcome_packet(user_id_found, target_user)
                 except Exception as e:
                     print(f"[ERROR CATCH] VIP promo failed: {e}")
@@ -288,10 +313,11 @@ class SecurityRoomBot(BaseBot):
                                 break
                         if user_id_found and user_id_found in self.vip_users:
                             self.vip_users.remove(user_id_found)
-                            await self.highrise.chat(f"⚡ [VIP REVOKED] @{target_user} removed.")
+                            await self.highrise.send_whisper(user.id, f"⚡ [VIP REVOKED] @{target_user} removed from lists.")
                 except Exception as e:
                     print(f"[ERROR CATCH] VIP removal failed: {e}")
 
+        # --- 👋 PUBLIC EASTER EGG RESPONDEE ---
         if clean_message == "hey!bot":
             try:
                 single_reply = (
@@ -304,18 +330,19 @@ class SecurityRoomBot(BaseBot):
             except Exception as e:
                 print(f"[ERROR CATCH] Greeting failed: {e}")
 
+        # --- 💡 GENERAL PRIVATE COMMAND UTILITIES ---
         if message.lower().strip() == "!help":
             if user.username.lower() == self.owner_username.lower():
-                await self.highrise.chat("⚡ [OWNER] Commands: !bal | !with <amount> | !give @user <amount> | !giveall <amount>g | !givevip @user | !removevip @user")
+                await self.highrise.send_whisper(user.id, "⚡ [OWNER LOG] Commands: !bal | !with <amount> | !give @user <amount> | !giveall <amount>g | !givevip @user | !removevip @user")
             elif user.id in self.vip_users:
                 await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down'.")
             else:
-                await self.highrise.chat(f"💡 @{user.username} Guest Menu: Type '!vip' to check status. Tip 500g into the jar to claim permanent VIP features!")
+                await self.highrise.send_whisper(user.id, f"💡 Menu: Type '!vip' to verify access status. Tip 500g into the system to claim lifetime VIP features!")
                 
         elif message.lower().strip() == "!vip":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
                 try:
-                    await self.highrise.chat(f"🚀 Teleporting VIP @{user.username} up to the VIP Lounge Floor!")
+                    await self.highrise.send_whisper(user.id, "🚀 Processing luxury lounge level teleport packets...")
                     chosen_point = random.choice(self.vip_spawn_points)
                     await self.highrise.teleport(user.id, chosen_point)
                 except Exception as tp_err:
@@ -326,12 +353,16 @@ class SecurityRoomBot(BaseBot):
         elif message.lower().strip() == "!down":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
                 try:
-                    await self.highrise.chat(f"⬇️ Sending @{user.username} back down!")
+                    await self.highrise.send_whisper(user.id, "⬇️ Sending you back down to ground entry level floor...")
                     await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
                 except Exception as tp_down_err:
                     print(f"[ERROR CATCH] Teleport down failed: {tp_down_err}")
             else:
                 await self.highrise.send_whisper(user.id, "❌ Access Denied.")
+
+    async def on_user_leave(self, user: User) -> None:
+        global LAST_NETWORK_ACTIVITY
+        LAST_NETWORK_ACTIVITY = time.time()  
 
 # --- AUTOMATED AGGRESSIVE RECONNECT GATEWAY ---
 async def start_bot_loop():
