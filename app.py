@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Dual-Engine Async Edition
+Highrise Room Management Bot - Token Refresh Secure Build
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -289,23 +289,26 @@ def run_health_server():
 # ⚙️ 3. RUNTIME BOOTSTRAPPER
 # =====================================================================
 async def start_bot_engine():
-    ROOM_ID = os.environ.get("HIGHRISE_ROOM_ID", "6a28b5b000b6151bd4c9641e")
-    API_TOKEN = os.environ.get("HIGHRISE_API_TOKEN", "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92")
+    ROOM_ID = "6a28b5b000b6151bd4c9641e"
+    API_TOKEN = "2c3d4e047bd47610ff60ae32fc4b774fe853c2344fb76acdb6ffba3d34a873a4"
     
     from highrise.__main__ import main, BotDefinition
     
     bot_instance = SecurityRoomBot()
-    bot_instance.owner_username = os.environ.get("BOT_OWNER_USERNAME", "sadi_key")
+    bot_instance.owner_username = "sadi_key"
     
     definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
     print("[MAIN ENGINE] Launching integrated Highrise Client...")
     await main(definitions=definitions)
 
 if __name__ == "__main__":
-    # 1. Spin up the Port Web Server inside a completely isolated thread
+    # Start the port server thread
     web_worker = threading.Thread(target=run_health_server, daemon=True)
     web_worker.start()
-    print("[WEB RUNNER] Active background listening port engaged.")
+    print("[WEB LAYER] Non-blocking server listening on port 10000...")
     
-    # 2. Start the Highrise engine directly on the main async runtime loop
-    asyncio.run(start_bot_engine())
+    # Fire up the game loop
+    try:
+        asyncio.run(start_bot_engine())
+    except Exception as e:
+        print(f"[CRITICAL BOOT ERROR] {e}")
