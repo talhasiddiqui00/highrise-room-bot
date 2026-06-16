@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot - Strictly Timed Keep-Alive Edition
+Highrise Room Management Bot - Invisible Whisper Keep-Alive Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Force strict 5-minute delays on announcements and removed connection login chat spam.
+Fixes: Converted empty-room ping loop to use invisible self-whispers to completely hide activity.
 """
 
 import sys
@@ -100,11 +100,25 @@ class SecurityRoomBot(BaseBot):
             await asyncio.sleep(1.0)
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             
-            # Start background loops
+            # Start background execution loops
             asyncio.create_task(self.start_announcement_loop())
             asyncio.create_task(self.start_heartbeat_watchdog())  
+            asyncio.create_task(self.start_self_ping_loop()) 
         except Exception as e:
             print(f"[ERROR CATCH] Core initialization failed: {e}")
+
+    async def start_self_ping_loop(self) -> None:
+        """Sends an invisible whisper to itself every 2 minutes to keep empty rooms alive"""
+        await asyncio.sleep(30)
+        while True:
+            try:
+                if self.bot_id:
+                    # FIX: Whispers to its own ID. Active API traffic, but completely hidden from players.
+                    await self.highrise.send_whisper(self.bot_id, "keepalive_pulse")
+                    print("[AMPLIFIER] Sent silent self-whisper keep-alive heartbeat.")
+            except Exception as e:
+                print(f"[PING WARNING] Silent keep-alive pulse missed: {e}")
+            await asyncio.sleep(120) 
 
     async def start_heartbeat_watchdog(self) -> None:
         global LAST_NETWORK_ACTIVITY
@@ -119,9 +133,7 @@ class SecurityRoomBot(BaseBot):
         global LAST_NETWORK_ACTIVITY
         while True:
             try:
-                # FIX: We sleep FIRST. The bot will wait exactly 5 minutes (300 seconds) before posting anything.
                 await asyncio.sleep(300)  
-                
                 await self.highrise.chat(
                     "📢 Tip 500g to become permanent VIP! Invite your friends to this public hangout place "
                     "and have tips and fun. Apply for MOD DM @sadi_key ✨"
@@ -170,7 +182,9 @@ class SecurityRoomBot(BaseBot):
     async def on_whisper(self, user: User, message: str) -> None:
         global LAST_NETWORK_ACTIVITY
         LAST_NETWORK_ACTIVITY = time.time()
-        if user.id == self.bot_id:
+        
+        # Ignores its own automated keepalive whispers so it doesn't print error logs
+        if user.id == self.bot_id or message == "keepalive_pulse":
             return
         try:
             await self.highrise.send_whisper(user.id, "Come to the room if you want to talk or command with me!")
