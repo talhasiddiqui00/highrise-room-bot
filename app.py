@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - VIP Admin Edition
+Highrise Room Management Bot - Single Threaded Self-Healing Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -11,8 +11,8 @@ import time
 import random
 import asyncio
 from typing import Union
-from multiprocessing import Process
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
@@ -20,27 +20,7 @@ from highrise.models import SessionMetadata, CurrencyItem, Item
 MEMORY_FILE = "tipped_users.txt"
 
 # =====================================================================
-# 🚀 1. LIGHTWEIGHT NATIVE WEB LAYER (Zero External Dependencies)
-# =====================================================================
-class LightHealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        """Answers Render's port checks and your 5-minute cron job pings"""
-        self.send_response(200)
-        self.send_header("Content-type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"status": "alive", "msg": "Web Service Operational"}')
-        
-    def log_message(self, format, *args):
-        return  # Silences standard web logs to keep your Render terminal clean
-
-def run_health_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), LightHealthCheckHandler)
-    print(f"[WEB LAYER] Web engine listening on port {port} for cron pings...")
-    server.serve_forever()
-
-# =====================================================================
-# 🤖 2. HIGHRISE CORE GAME ENGINE 
+# 🤖 1. HIGHRISE CORE GAME ENGINE (With Active Connection Monitoring)
 # =====================================================================
 class SecurityRoomBot(BaseBot):
     def __init__(self):
@@ -50,6 +30,7 @@ class SecurityRoomBot(BaseBot):
         self.owner_username = "sadi_key"
         self.owner_id = None  
         self.bot_id = None
+        self.last_highrise_activity = time.time()
         
         # 📍 TARGET LOCATION: Bot spawns directly where people walk in
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
@@ -85,18 +66,35 @@ class SecurityRoomBot(BaseBot):
             self.owner_id = session_metadata.room_info.owner_id
         except AttributeError: pass
 
-        print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
+        print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server.")
+        self.last_highrise_activity = time.time()
         try:
-            # ⏳ Wait for game stream asset registration to fully settle
             await asyncio.sleep(2.5)
-            
-            # 🎯 Force snap the bot onto your exact entry coordinates
             print(f"[SPAWN FORCE] Teleporting bot to door position: {self.bot_spawn_position}")
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             
+            # Start background loops inside the unified engine
             asyncio.create_task(self.start_announcement_loop())
+            asyncio.create_task(self.connection_watchdog_loop())
         except Exception as e:
             print(f"[CRITICAL ERROR] Spawn failure: {e}")
+
+    async def connection_watchdog_loop(self) -> None:
+        """ Actively ensures Highrise server hasn't dropped the connection silently """
+        while True:
+            await asyncio.sleep(60) # Check connection status every minute
+            
+            # Keep-alive heartbeat: Request wallet data to keep socket piping traffic
+            try:
+                await self.highrise.get_wallet()
+                self.last_highrise_activity = time.time()
+            except Exception:
+                pass
+                
+            # If the engine goes completely silent with no data packets for 8 minutes, trigger a reset
+            if time.time() - self.last_highrise_activity > 480:
+                print("[WATCHDOG ALERT] Game connection frozen. Hard restarting container...")
+                sys.exit(1) # Exits app so Render instantly builds a fresh connection loop
 
     async def start_announcement_loop(self) -> None:
         while True:
@@ -110,6 +108,7 @@ class SecurityRoomBot(BaseBot):
                 print(f"[ANN] Skipped: {e}")
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
+        self.last_highrise_activity = time.time()
         if user.id == self.bot_id or "bot" in user.username.lower(): return
         if user.username.lower() == self.owner_username.lower(): self.owner_id = user.id
 
@@ -142,6 +141,7 @@ class SecurityRoomBot(BaseBot):
             print(f"[WHISPER ERROR] Failed instructions packet: {e}")
 
     async def on_whisper(self, user: User, message: str) -> None:
+        self.last_highrise_activity = time.time()
         if user.id == self.bot_id: return
         try:
             await self.highrise.send_whisper(user.id, "Come to the room if you want to talk or command with me!")
@@ -149,6 +149,7 @@ class SecurityRoomBot(BaseBot):
             print(f"[WHISPER RESPOND] Failed: {e}")
 
     async def on_tip(self, sender: User, receiver: User, tip: Union[CurrencyItem, Item]) -> None:
+        self.last_highrise_activity = time.time()
         if sender.id == self.bot_id: return
 
         if isinstance(tip, CurrencyItem):
@@ -172,6 +173,7 @@ class SecurityRoomBot(BaseBot):
                 print(f"[TIP PAYLOAD] Processing error: {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
+        self.last_highrise_activity = time.time()
         # --- 👑 OWNER UTILITY COMMANDS ---
         if user.username.lower() == self.owner_username.lower():
             clean_msg = message.lower().strip()
@@ -207,7 +209,6 @@ class SecurityRoomBot(BaseBot):
                                 await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
                 except Exception as e: print(f"[GIFT FAIL] Error: {e}")
 
-            # 👑 NEW: MANUALLY ADD VIP
             elif clean_msg.startswith("!givevip "):
                 try:
                     parts = message.split()
@@ -215,7 +216,6 @@ class SecurityRoomBot(BaseBot):
                         target_user = parts[1].replace("@", "").strip()
                         room_users = await self.highrise.get_room_users()
                         user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
-                        
                         if user_id_found:
                             if user_id_found not in self.vip_users:
                                 self.vip_users.append(user_id_found)
@@ -227,7 +227,6 @@ class SecurityRoomBot(BaseBot):
                             await self.highrise.send_whisper(user.id, f"❌ Player @{target_user} could not be found in the room.")
                 except Exception as e: print(f"[GIVEVIP FAIL] Error: {e}")
 
-            # 👑 NEW: MANUALLY REMOVE VIP
             elif clean_msg.startswith("!removevip "):
                 try:
                     parts = message.split()
@@ -236,22 +235,16 @@ class SecurityRoomBot(BaseBot):
                         room_users = await self.highrise.get_room_users()
                         user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
                         
-                        # Check by active session or look directly in list if they left
                         if user_id_found and user_id_found in self.vip_users:
                             self.vip_users.remove(user_id_found)
                             await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
                         else:
-                            # Advanced scan: Try to clean them out even if they aren't online right now
-                            await self.highrise.send_whisper(user.id, f"Processing target removal for: @{target_user}...")
-                            # If they are currently in the list, get them out
                             removed = False
                             for u_id in list(self.vip_users):
-                                # Since user_id_found handles room lookup, fallback directly to list evaluation
                                 if user_id_found == u_id:
                                     self.vip_users.remove(u_id)
                                     removed = True
-                            
-                            if removed or (user_id_found and user_id_found in self.vip_users):
+                            if removed:
                                 await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
                             else:
                                 await self.highrise.send_whisper(user.id, f"❌ @{target_user} does not have active VIP status.")
@@ -283,32 +276,42 @@ class SecurityRoomBot(BaseBot):
                 except Exception as tp_down_err: print(f"[TP DOWN ERROR] {tp_down_err}")
 
 # =====================================================================
-# ⚙️ 3. RUNTIME PROCESS MANAGER
+# 🚀 2. LIGHTWEIGHT NATIVE WEB LAYER (Handles Port Requirements)
 # =====================================================================
-def launch_game_bot():
-    """ Runs isolated inside its own process loop safely """
+class LightHealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"status": "alive", "msg": "Unified Service Operational"}')
+        
+    def log_message(self, format, *args):
+        return
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), LightHealthCheckHandler)
+    server.serve_forever()
+
+# =====================================================================
+# ⚙️ 3. UNIFIED STARTUP ENGINE
+# =====================================================================
+if __name__ == "__main__":
+    # Start the web webserver in a secondary thread so it satisfies Render / Cron checks
+    web_thread = threading.Thread(target=run_health_server, daemon=True)
+    web_thread.start()
+    print("[WEB LAYER] Thread actively listening for cron pings...")
+
+    # Run the Highrise bot directly on the main thread loop
     ROOM_ID = os.environ.get("HIGHRISE_ROOM_ID", "6a28b5b000b6151bd4c9641e")
     API_TOKEN = os.environ.get("HIGHRISE_API_TOKEN", "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92")
     
     from highrise.__main__ import main, BotDefinition
     
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    bot_instance = SecurityRoomBot()
+    bot_instance.owner_username = os.environ.get("BOT_OWNER_USERNAME", "sadi_key")
     
-    print("[BACKGROUND PROCESS] Launching Highrise SDK Listener...")
-    try:
-        bot_instance = SecurityRoomBot()
-        bot_instance.owner_username = os.environ.get("BOT_OWNER_USERNAME", "sadi_key")
-        
-        definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
-        loop.run_until_complete(main(definitions=definitions))
-    except Exception as err:
-        print(f"[PROCESS CRASH] Connection interrupted: {err}")
-
-if __name__ == "__main__":
-    # 1. Fire up the Highrise Bot inside its own completely safe background process
-    bot_worker = Process(target=launch_game_bot, daemon=True)
-    bot_worker.start()
+    definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
     
-    # 2. Run the simple built-in HTTP health checker on the main thread to satisfy Render's port listener
-    run_health_server()
+    print("[MAIN ENGINE] Launching integrated Highrise Client...")
+    asyncio.run(main(definitions=definitions))
