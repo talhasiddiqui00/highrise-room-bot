@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Production Multi-Process Edition
+Highrise Room Management Bot - Dual-Engine Async Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -270,7 +270,7 @@ class SecurityRoomBot(BaseBot):
                 except Exception as tp_down_err: print(f"[TP DOWN ERROR] {tp_down_err}")
 
 # =====================================================================
-# 🚀 2. SEPARATE BACKGROUND HEALTH LAYER
+# 🚀 2. LIGHTWEIGHT WEB LAYER
 # =====================================================================
 class LightHealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -285,7 +285,27 @@ def run_health_server():
     server = HTTPServer(("0.0.0.0", port), LightHealthCheckHandler)
     server.serve_forever()
 
-# Automatically spin up the port listener when imported or invoked
-web_worker = threading.Thread(target=run_health_server, daemon=True)
-web_worker.start()
-print("[WEB RUNNER] Active background listening port engaged.")
+# =====================================================================
+# ⚙️ 3. RUNTIME BOOTSTRAPPER
+# =====================================================================
+async def start_bot_engine():
+    ROOM_ID = os.environ.get("HIGHRISE_ROOM_ID", "6a28b5b000b6151bd4c9641e")
+    API_TOKEN = os.environ.get("HIGHRISE_API_TOKEN", "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92")
+    
+    from highrise.__main__ import main, BotDefinition
+    
+    bot_instance = SecurityRoomBot()
+    bot_instance.owner_username = os.environ.get("BOT_OWNER_USERNAME", "sadi_key")
+    
+    definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
+    print("[MAIN ENGINE] Launching integrated Highrise Client...")
+    await main(definitions=definitions)
+
+if __name__ == "__main__":
+    # 1. Spin up the Port Web Server inside a completely isolated thread
+    web_worker = threading.Thread(target=run_health_server, daemon=True)
+    web_worker.start()
+    print("[WEB RUNNER] Active background listening port engaged.")
+    
+    # 2. Start the Highrise engine directly on the main async runtime loop
+    asyncio.run(start_bot_engine())
