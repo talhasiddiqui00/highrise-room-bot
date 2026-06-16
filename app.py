@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Single Threaded Self-Healing Edition
+Highrise Room Management Bot - Async Unified Self-Healing Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -12,7 +12,6 @@ import random
 import asyncio
 from typing import Union
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
 
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
@@ -276,33 +275,40 @@ class SecurityRoomBot(BaseBot):
                 except Exception as tp_down_err: print(f"[TP DOWN ERROR] {tp_down_err}")
 
 # =====================================================================
-# 🚀 2. LIGHTWEIGHT NATIVE WEB LAYER (Handles Port Requirements)
+# 🚀 2. ASYNC NATIVE WEB LAYER (Completely Non-Blocking)
 # =====================================================================
-class LightHealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"status": "alive", "msg": "Unified Service Operational"}')
-        
-    def log_message(self, format, *args):
-        return
+async def handle_http_request(reader, writer):
+    """ Non-blocking network ping handler to immediately clear Render requirements """
+    data = await reader.read(1024)
+    request = data.decode('utf-8', errors='ignore')
+    
+    # Send a clean 200 OK JSON response without delaying the system thread
+    response = (
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/json\r\n"
+        "Connection: close\r\n\r\n"
+        '{"status": "alive", "msg": "Async Service Operational"}'
+    )
+    writer.write(response.encode('utf-8'))
+    await writer.drain()
+    writer.close()
+    await writer.wait_closed()
 
-def run_health_server():
+async def start_async_health_server():
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), LightHealthCheckHandler)
-    server.serve_forever()
+    server = await asyncio.start_server(handle_http_request, "0.0.0.0", port)
+    print(f"[WEB LAYER] Non-blocking server listening on port {port}...")
+    async with server:
+        await server.serve_forever()
 
 # =====================================================================
-# ⚙️ 3. UNIFIED STARTUP ENGINE
+# ⚙️ 3. ASYNC STARTUP RUNNER
 # =====================================================================
-if __name__ == "__main__":
-    # Start the web webserver in a secondary thread so it satisfies Render / Cron checks
-    web_thread = threading.Thread(target=run_health_server, daemon=True)
-    web_thread.start()
-    print("[WEB LAYER] Thread actively listening for cron pings...")
+async def main_runner():
+    # 1. Fire up the Web Layer inside the same event loop task system
+    asyncio.create_task(start_async_health_server())
 
-    # Run the Highrise bot directly on the main thread loop
+    # 2. Setup and run Highrise SDK client immediately alongside it
     ROOM_ID = os.environ.get("HIGHRISE_ROOM_ID", "6a28b5b000b6151bd4c9641e")
     API_TOKEN = os.environ.get("HIGHRISE_API_TOKEN", "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92")
     
@@ -312,6 +318,12 @@ if __name__ == "__main__":
     bot_instance.owner_username = os.environ.get("BOT_OWNER_USERNAME", "sadi_key")
     
     definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
-    
     print("[MAIN ENGINE] Launching integrated Highrise Client...")
-    asyncio.run(main(definitions=definitions))
+    await main(definitions=definitions)
+
+if __name__ == "__main__":
+    # Start both services smoothly together on a single clean event loop execution
+    try:
+        asyncio.run(main_runner())
+    except KeyboardInterrupt:
+        print("Bot stopped manually.")
