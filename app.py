@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot - Invisible Whisper Keep-Alive Edition
+Highrise Room Management Bot - Safe Request Keep-Alive Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Converted empty-room ping loop to use invisible self-whispers to completely hide activity.
+Fixes: Changed whisper keepalive to get_wallet keepalive to prevent instant login rejection.
 """
 
 import sys
@@ -108,16 +108,16 @@ class SecurityRoomBot(BaseBot):
             print(f"[ERROR CATCH] Core initialization failed: {e}")
 
     async def start_self_ping_loop(self) -> None:
-        """Sends an invisible whisper to itself every 2 minutes to keep empty rooms alive"""
+        """Requests wallet details every 2 minutes. Safe, completely silent, and updates network data."""
         await asyncio.sleep(30)
         while True:
             try:
                 if self.bot_id:
-                    # FIX: Whispers to its own ID. Active API traffic, but completely hidden from players.
-                    await self.highrise.send_whisper(self.bot_id, "keepalive_pulse")
-                    print("[AMPLIFIER] Sent silent self-whisper keep-alive heartbeat.")
+                    # FIX: Replaced whisper with wallet check. Completely invisible to players.
+                    await self.highrise.get_wallet()
+                    print("[AMPLIFIER] Sent secure internal data ping to keep connection awake.")
             except Exception as e:
-                print(f"[PING WARNING] Silent keep-alive pulse missed: {e}")
+                print(f"[PING WARNING] Internal ping pulse missed: {e}")
             await asyncio.sleep(120) 
 
     async def start_heartbeat_watchdog(self) -> None:
@@ -183,8 +183,7 @@ class SecurityRoomBot(BaseBot):
         global LAST_NETWORK_ACTIVITY
         LAST_NETWORK_ACTIVITY = time.time()
         
-        # Ignores its own automated keepalive whispers so it doesn't print error logs
-        if user.id == self.bot_id or message == "keepalive_pulse":
+        if user.id == self.bot_id:
             return
         try:
             await self.highrise.send_whisper(user.id, "Come to the room if you want to talk or command with me!")
