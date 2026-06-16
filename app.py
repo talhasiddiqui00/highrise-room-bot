@@ -1,7 +1,7 @@
 """
-Highrise Room Management Bot - Split-Process Production Edition
+Highrise Room Management Bot - Native Light Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
-SDK Version: 25.1.0 (Auto-reconnecting Core)
+SDK Version: 25.1.0
 Developer: sadi_key
 """
 
@@ -12,26 +12,35 @@ import os
 import time
 from typing import Union
 from multiprocessing import Process
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import uvicorn
-from fastapi import FastAPI
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
 MEMORY_FILE = "tipped_users.txt"
 
 # =====================================================================
-# 🚀 1. WEB HOSTING LAYER (FASTAPI)
+# 🚀 1. LIGHTWEIGHT NATIVE WEB LAYER (No FastAPI/Uvicorn Required)
 # =====================================================================
-app = FastAPI()
+class LightHealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        """ Instantly responds to Render/Cron pings without complex async layers """
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"status": "alive"}')
+        
+    def log_message(self, format, *args):
+        return # Silences standard request logs to keep terminal clean
 
-@app.get("/")
-def health_check():
-    """ Instantly answers Render / Cron queries over HTTP """
-    return {"status": "alive", "engine": "Highrise Bridge Active", "time": time.time()}
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), LightHealthCheckHandler)
+    print(f"[WEB LAYER] Light web engine successfully listening on port {port}")
+    server.serve_forever()
 
 # =====================================================================
-# 🤖 2. HIGHRISE CORE GAME ENGINE (v25.1.0 Compatible)
+# 🤖 2. HIGHRISE CORE GAME ENGINE 
 # =====================================================================
 class SecurityRoomBot(BaseBot):
     def __init__(self):
@@ -218,31 +227,29 @@ class SecurityRoomBot(BaseBot):
 # ⚙️ 3. RUNTIME PROCESS MANAGER
 # =====================================================================
 def launch_game_bot():
-    """ Runs isolated inside its own thread loop via standard SDK config """
-    ROOM_ID = "6a28b5b000b6151bd4c9641e"
-    API_TOKEN = "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92"
+    """ Runs isolated inside its own thread loop safely """
+    ROOM_ID = os.environ.get("HIGHRISE_ROOM_ID", "6a28b5b000b6151bd4c9641e")
+    API_TOKEN = os.environ.get("HIGHRISE_API_TOKEN", "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92")
     
     from highrise.__main__ import main, BotDefinition
     
-    # Establish a fresh isolated asyncio loop to process connections cleanly
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    print("[ISOLATED PROCESS] Initializing Highrise connection via SDK v25.1.0...")
+    print("[ISOLATED PROCESS] Initializing Highrise connection...")
     try:
         bot_instance = SecurityRoomBot()
+        bot_instance.owner_username = os.environ.get("BOT_OWNER_USERNAME", "sadi_key")
+        
         definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
-        # v25.1.0 automatically handles drops internally
         loop.run_until_complete(main(definitions=definitions))
     except Exception as err:
         print(f"[PROCESS CRASH] Handshake terminated: {err}")
 
 if __name__ == "__main__":
-    # 1. Fire up the Highrise Bot inside an entirely independent process
+    # 1. Fire up the Highrise Bot inside its own completely safe background process
     bot_worker = Process(target=launch_game_bot, daemon=True)
     bot_worker.start()
     
-    # 2. Let the main process execute Uvicorn to satisfy Render's port check immediately
-    port = int(os.environ.get("PORT", 10000))
-    print(f"[MAIN LAYER] Opening Web Service pipeline on Port {port}")
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+    # 2. Run the simple built-in HTTP health checker on the main thread to pass Render's port check
+    run_health_server()
