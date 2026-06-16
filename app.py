@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Token Refresh Secure Build
+Highrise Room Management Bot - Fresh Account Build
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -290,7 +290,7 @@ def run_health_server():
 # =====================================================================
 async def start_bot_engine():
     ROOM_ID = "6a28b5b000b6151bd4c9641e"
-    API_TOKEN = "2c3d4e047bd47610ff60ae32fc4b774fe853c2344fb76acdb6ffba3d34a873a4"
+    API_TOKEN = "fd250294097b09a7fd05aa523c63b77ef0b980cc28f7f09742b22d0db30b53a0"
     
     from highrise.__main__ import main, BotDefinition
     
