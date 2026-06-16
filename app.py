@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot - Restored Stable Core Edition
+Highrise Room Management Bot - Pure Background Worker Core
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Reverted to the stable, long-lasting connection loops with zero-spam login configuration.
+Fixes: Stripped HTTP servers to run natively as a zero-port background engine.
 """
 
 import sys
@@ -10,39 +10,13 @@ import asyncio
 import random
 import os
 import traceback
-import threading
 import time
-from http.server import SimpleHTTPRequestHandler, HTTPServer
 from typing import Union
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
 MEMORY_FILE = "tipped_users.txt"
 LAST_NETWORK_ACTIVITY = time.time()  
-
-# --- 🚀 FREE WEB PORT ALIVE GATEWAY ---
-class KeepAliveServer(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"Bot tracking system is completely alive 24/7.")
-
-    def log_message(self, format, *args):
-        pass 
-
-def start_background_web_server():
-    try:
-        port = int(os.environ.get("PORT", 10000))
-        server = HTTPServer(('0.0.0.0', port), KeepAliveServer)
-        print(f"[SYSTEM LOG] Web gateway tracking channel opened on port: {port}")
-        server.serve_forever()
-    except Exception as e:
-        print(f"[ERROR CATCH] Web server failed to spin up: {e}")
-
-web_thread = threading.Thread(target=start_background_web_server, daemon=True)
-web_thread.start()
-
 
 # --- 🤖 HIGHRISE BOT CORE ENGINE ---
 class SecurityRoomBot(BaseBot):
@@ -96,7 +70,6 @@ class SecurityRoomBot(BaseBot):
 
         print(f"\n[SYSTEM LOG] Connection authorized successfully.")
         try:
-            # Teleport avatar to the floor quietly without making a chat broadcast announcement
             await asyncio.sleep(1.0)
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             
@@ -119,7 +92,6 @@ class SecurityRoomBot(BaseBot):
         global LAST_NETWORK_ACTIVITY
         while True:
             try:
-                # Force wait 5 minutes BEFORE sending the first announcement
                 await asyncio.sleep(300)  
                 await self.highrise.chat(
                     "📢 Tip 500g to become permanent VIP! Invite your friends to this public hangout place "
@@ -372,7 +344,7 @@ class SecurityRoomBot(BaseBot):
         global LAST_NETWORK_ACTIVITY
         LAST_NETWORK_ACTIVITY = time.time()  
 
-# --- AUTOMATED AGGRESSIVE RECONNECT GATEWAY ---
+# --- AUTOMATED RECONNECT GATEWAY ---
 async def start_bot_loop():
     ROOM_ID = "6a28b5b000b6151bd4c9641e"
     API_TOKEN = "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92"
@@ -392,17 +364,6 @@ async def start_bot_loop():
         await asyncio.sleep(10)
 
 if __name__ == "__main__":
-    # FIX: Force the background web server to register on port 10000 immediately 
-    # BEFORE the async bot loop blocks the CPU. This stops Render's port-scan timeouts.
-    print("[SYSTEM LOG] Pre-loading Web Gateway to satisfy Render port check...")
-    
-    # We ensure the port thread is fully alive
-    if not web_thread.is_alive():
-        web_thread.start()
-        
-    # Give the port 2 seconds to cleanly register as open
-    time.sleep(2.0) 
-    
     try:
         asyncio.run(start_bot_loop())
     except KeyboardInterrupt:
