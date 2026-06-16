@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot - Secret Whisper & Cron-Watchdog Edition
+Highrise Room Management Bot - Strictly Timed Keep-Alive Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Converted command responses to private whispers for all users, VIPs, and Owner.
+Fixes: Force strict 5-minute delays on announcements and removed connection login chat spam.
 """
 
 import sys
@@ -55,6 +55,8 @@ class SecurityRoomBot(BaseBot):
         self.owner_id = None  
         self.bot_id = None
         
+        # Room Coordinates Layout Configurations
+        self.bot_spawn_position = Position(14.0, 2.0, 37.0, facing="FrontRight")
         self.vip_spawn_points = [
             Position(26.75, 23.0, 23.35, facing="FrontRight"),
             Position(19.00070, 23.0, 33.99, facing="FrontRight"),
@@ -94,7 +96,11 @@ class SecurityRoomBot(BaseBot):
 
         print(f"\n[SYSTEM LOG] Connection authorized successfully.")
         try:
-            await self.highrise.chat("✨ Secure Room Bot is now online and active! ✨")
+            # Teleport avatar to the floor quietly without making a chat broadcast announcement
+            await asyncio.sleep(1.0)
+            await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
+            
+            # Start background loops
             asyncio.create_task(self.start_announcement_loop())
             asyncio.create_task(self.start_heartbeat_watchdog())  
         except Exception as e:
@@ -105,15 +111,17 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(60)  
             idle_duration = time.time() - LAST_NETWORK_ACTIVITY
-            if idle_duration > 600:  # Matches your 5-min cron structure perfectly
-                print("\n[WATCHDOG CRITICAL] Highrise connection has frozen silently! Forcing termination...")
+            if idle_duration > 600:  
+                print("\n[WATCHDOG CRITICAL] Highrise connection frozen! Terminating for clean restart...")
                 sys.exit(1)
 
     async def start_announcement_loop(self) -> None:
         global LAST_NETWORK_ACTIVITY
         while True:
             try:
-                await asyncio.sleep(240)  # Fires every 4 minutes to guarantee the watchdog stays reset
+                # FIX: We sleep FIRST. The bot will wait exactly 5 minutes (300 seconds) before posting anything.
+                await asyncio.sleep(300)  
+                
                 await self.highrise.chat(
                     "📢 Tip 500g to become permanent VIP! Invite your friends to this public hangout place "
                     "and have tips and fun. Apply for MOD DM @sadi_key ✨"
@@ -374,7 +382,8 @@ async def start_bot_loop():
     while True:
         print("[SYSTEM LOG] Launching core Highrise API connection sequence...")
         try:
-            definitions = [BotDefinition(SecurityRoomBot(), ROOM_ID, API_TOKEN)]
+            bot_instance = SecurityRoomBot()
+            definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
             await main(definitions=definitions)
         except BaseException as err:
             print(f"\n[NETWORK CRITICAL] Connection snapped or frozen by Highrise API: {err}")
