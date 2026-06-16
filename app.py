@@ -392,6 +392,17 @@ async def start_bot_loop():
         await asyncio.sleep(10)
 
 if __name__ == "__main__":
+    # FIX: Force the background web server to register on port 10000 immediately 
+    # BEFORE the async bot loop blocks the CPU. This stops Render's port-scan timeouts.
+    print("[SYSTEM LOG] Pre-loading Web Gateway to satisfy Render port check...")
+    
+    # We ensure the port thread is fully alive
+    if not web_thread.is_alive():
+        web_thread.start()
+        
+    # Give the port 2 seconds to cleanly register as open
+    time.sleep(2.0) 
+    
     try:
         asyncio.run(start_bot_loop())
     except KeyboardInterrupt:
