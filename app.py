@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Door Spawn Welcome Edition
+Highrise Room Management Bot - VIP Admin Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -174,14 +174,16 @@ class SecurityRoomBot(BaseBot):
     async def on_chat(self, user: User, message: str) -> None:
         # --- 👑 OWNER UTILITY COMMANDS ---
         if user.username.lower() == self.owner_username.lower():
-            if message.lower().strip() == "!bal":
+            clean_msg = message.lower().strip()
+            
+            if clean_msg == "!bal":
                 try:
                     wallet_response = await self.highrise.get_wallet()
                     bot_gold = next((item.amount for item in wallet_response.content if item.type == "gold"), 0)
                     await self.highrise.send_whisper(user.id, f"💰 [VAULT BALANCE] {bot_gold} gold remains securely in reserve.")
                 except Exception as e: print(f"[BALANCE FAIL] timeout: {e}")
                     
-            elif message.lower().strip().startswith("!with"):
+            elif clean_msg.startswith("!with"):
                 try:
                     parts = message.lower().strip().split()
                     if len(parts) > 1:
@@ -191,7 +193,7 @@ class SecurityRoomBot(BaseBot):
                             await self.highrise.tip_user(user.id, f"gold_bar_{raw_amount}")
                 except Exception as e: print(f"[WITHDRAWAL FAIL] Error: {e}")
                     
-            elif message.lower().strip().startswith("!give "):
+            elif clean_msg.startswith("!give "):
                 try:
                     parts = message.split()  
                     if len(parts) >= 3:
@@ -205,10 +207,60 @@ class SecurityRoomBot(BaseBot):
                                 await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
                 except Exception as e: print(f"[GIFT FAIL] Error: {e}")
 
+            # 👑 NEW: MANUALLY ADD VIP
+            elif clean_msg.startswith("!givevip "):
+                try:
+                    parts = message.split()
+                    if len(parts) >= 2:
+                        target_user = parts[1].replace("@", "").strip()
+                        room_users = await self.highrise.get_room_users()
+                        user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                        
+                        if user_id_found:
+                            if user_id_found not in self.vip_users:
+                                self.vip_users.append(user_id_found)
+                                await self.highrise.chat(f"👑 VIP Status manually granted to @{target_user} by the Room Owner! ✨")
+                                await self.send_vip_welcome_packet(user_id_found, target_user)
+                            else:
+                                await self.highrise.send_whisper(user.id, f"ℹ️ @{target_user} is already a VIP.")
+                        else:
+                            await self.highrise.send_whisper(user.id, f"❌ Player @{target_user} could not be found in the room.")
+                except Exception as e: print(f"[GIVEVIP FAIL] Error: {e}")
+
+            # 👑 NEW: MANUALLY REMOVE VIP
+            elif clean_msg.startswith("!removevip "):
+                try:
+                    parts = message.split()
+                    if len(parts) >= 2:
+                        target_user = parts[1].replace("@", "").strip()
+                        room_users = await self.highrise.get_room_users()
+                        user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                        
+                        # Check by active session or look directly in list if they left
+                        if user_id_found and user_id_found in self.vip_users:
+                            self.vip_users.remove(user_id_found)
+                            await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
+                        else:
+                            # Advanced scan: Try to clean them out even if they aren't online right now
+                            await self.highrise.send_whisper(user.id, f"Processing target removal for: @{target_user}...")
+                            # If they are currently in the list, get them out
+                            removed = False
+                            for u_id in list(self.vip_users):
+                                # Since user_id_found handles room lookup, fallback directly to list evaluation
+                                if user_id_found == u_id:
+                                    self.vip_users.remove(u_id)
+                                    removed = True
+                            
+                            if removed or (user_id_found and user_id_found in self.vip_users):
+                                await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
+                            else:
+                                await self.highrise.send_whisper(user.id, f"❌ @{target_user} does not have active VIP status.")
+                except Exception as e: print(f"[REMOVEVIP FAIL] Error: {e}")
+
         # --- 💡 GENERAL PRIVATE COMMAND UTILITIES ---
         if message.lower().strip() == "!help":
             if user.username.lower() == self.owner_username.lower():
-                await self.highrise.send_whisper(user.id, "⚡ [OWNER LOG] Commands: !bal | !with <amount> | !give @user <amount>")
+                await self.highrise.send_whisper(user.id, "⚡ [OWNER LOG] Commands: !bal | !with <amount> | !give @user <amount> | !givevip @user | !removevip @user")
             elif user.id in self.vip_users:
                 await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down'.")
             else:
