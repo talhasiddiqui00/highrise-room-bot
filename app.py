@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Door Welcome Edition
+Highrise Room Management Bot - Door Spawn Welcome Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -51,7 +51,7 @@ class SecurityRoomBot(BaseBot):
         self.owner_id = None  
         self.bot_id = None
         
-        # 📍 CHANGED: Bot now spawns directly near the door join point!
+        # 📍 TARGET LOCATION: Bot spawns directly where people walk in
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -87,8 +87,13 @@ class SecurityRoomBot(BaseBot):
 
         print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         try:
-            await asyncio.sleep(1.0)
+            # ⏳ Wait for game stream asset registration to fully settle
+            await asyncio.sleep(2.5)
+            
+            # 🎯 Force snap the bot onto your exact entry coordinates
+            print(f"[SPAWN FORCE] Teleporting bot to door position: {self.bot_spawn_position}")
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
+            
             asyncio.create_task(self.start_announcement_loop())
         except Exception as e:
             print(f"[CRITICAL ERROR] Spawn failure: {e}")
