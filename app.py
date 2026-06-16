@@ -1,15 +1,15 @@
 """
-Highrise Room Management Bot - Native Light Edition
+Highrise Room Management Bot - Scratch Web Service Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
 """
 
-import sys
-import asyncio
-import random
 import os
+import sys
 import time
+import random
+import asyncio
 from typing import Union
 from multiprocessing import Process
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -20,23 +20,23 @@ from highrise.models import SessionMetadata, CurrencyItem, Item
 MEMORY_FILE = "tipped_users.txt"
 
 # =====================================================================
-# 🚀 1. LIGHTWEIGHT NATIVE WEB LAYER (No FastAPI/Uvicorn Required)
+# 🚀 1. LIGHTWEIGHT NATIVE WEB LAYER (Zero External Dependencies)
 # =====================================================================
 class LightHealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        """ Instantly responds to Render/Cron pings without complex async layers """
+        """Answers Render's port checks and your 5-minute cron job pings"""
         self.send_response(200)
         self.send_header("Content-type", "application/json")
         self.end_headers()
-        self.wfile.write(b'{"status": "alive"}')
+        self.wfile.write(b'{"status": "alive", "msg": "Web Service Operational"}')
         
     def log_message(self, format, *args):
-        return # Silences standard request logs to keep terminal clean
+        return  # Silences standard web logs to keep your Render terminal clean
 
 def run_health_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), LightHealthCheckHandler)
-    print(f"[WEB LAYER] Light web engine successfully listening on port {port}")
+    print(f"[WEB LAYER] Web engine listening on port {port} for cron pings...")
     server.serve_forever()
 
 # =====================================================================
@@ -227,7 +227,7 @@ class SecurityRoomBot(BaseBot):
 # ⚙️ 3. RUNTIME PROCESS MANAGER
 # =====================================================================
 def launch_game_bot():
-    """ Runs isolated inside its own thread loop safely """
+    """ Runs completely isolated inside its own process loop """
     ROOM_ID = os.environ.get("HIGHRISE_ROOM_ID", "6a28b5b000b6151bd4c9641e")
     API_TOKEN = os.environ.get("HIGHRISE_API_TOKEN", "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92")
     
@@ -236,7 +236,7 @@ def launch_game_bot():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
-    print("[ISOLATED PROCESS] Initializing Highrise connection...")
+    print("[BACKGROUND PROCESS] Launching Highrise SDK Listener...")
     try:
         bot_instance = SecurityRoomBot()
         bot_instance.owner_username = os.environ.get("BOT_OWNER_USERNAME", "sadi_key")
@@ -244,12 +244,4 @@ def launch_game_bot():
         definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
         loop.run_until_complete(main(definitions=definitions))
     except Exception as err:
-        print(f"[PROCESS CRASH] Handshake terminated: {err}")
-
-if __name__ == "__main__":
-    # 1. Fire up the Highrise Bot inside its own completely safe background process
-    bot_worker = Process(target=launch_game_bot, daemon=True)
-    bot_worker.start()
-    
-    # 2. Run the simple built-in HTTP health checker on the main thread to pass Render's port check
-    run_health_server()
+        print(f"
