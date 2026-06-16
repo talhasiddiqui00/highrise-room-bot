@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Async Unified Self-Healing Edition
+Highrise Room Management Bot - Production Multi-Process Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -12,6 +12,7 @@ import random
 import asyncio
 from typing import Union
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
@@ -19,7 +20,7 @@ from highrise.models import SessionMetadata, CurrencyItem, Item
 MEMORY_FILE = "tipped_users.txt"
 
 # =====================================================================
-# 🤖 1. HIGHRISE CORE GAME ENGINE (With Active Connection Monitoring)
+# 🤖 1. HIGHRISE CORE GAME ENGINE
 # =====================================================================
 class SecurityRoomBot(BaseBot):
     def __init__(self):
@@ -65,35 +66,30 @@ class SecurityRoomBot(BaseBot):
             self.owner_id = session_metadata.room_info.owner_id
         except AttributeError: pass
 
-        print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server.")
+        print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         self.last_highrise_activity = time.time()
         try:
             await asyncio.sleep(2.5)
             print(f"[SPAWN FORCE] Teleporting bot to door position: {self.bot_spawn_position}")
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             
-            # Start background loops inside the unified engine
             asyncio.create_task(self.start_announcement_loop())
             asyncio.create_task(self.connection_watchdog_loop())
         except Exception as e:
             print(f"[CRITICAL ERROR] Spawn failure: {e}")
 
     async def connection_watchdog_loop(self) -> None:
-        """ Actively ensures Highrise server hasn't dropped the connection silently """
         while True:
-            await asyncio.sleep(60) # Check connection status every minute
-            
-            # Keep-alive heartbeat: Request wallet data to keep socket piping traffic
+            await asyncio.sleep(60)
             try:
                 await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
             except Exception:
                 pass
                 
-            # If the engine goes completely silent with no data packets for 8 minutes, trigger a reset
             if time.time() - self.last_highrise_activity > 480:
                 print("[WATCHDOG ALERT] Game connection frozen. Hard restarting container...")
-                sys.exit(1) # Exits app so Render instantly builds a fresh connection loop
+                sys.exit(1)
 
     async def start_announcement_loop(self) -> None:
         while True:
@@ -173,7 +169,6 @@ class SecurityRoomBot(BaseBot):
 
     async def on_chat(self, user: User, message: str) -> None:
         self.last_highrise_activity = time.time()
-        # --- 👑 OWNER UTILITY COMMANDS ---
         if user.username.lower() == self.owner_username.lower():
             clean_msg = message.lower().strip()
             
@@ -275,55 +270,22 @@ class SecurityRoomBot(BaseBot):
                 except Exception as tp_down_err: print(f"[TP DOWN ERROR] {tp_down_err}")
 
 # =====================================================================
-# 🚀 2. ASYNC NATIVE WEB LAYER (Completely Non-Blocking)
+# 🚀 2. SEPARATE BACKGROUND HEALTH LAYER
 # =====================================================================
-async def handle_http_request(reader, writer):
-    """ Non-blocking network ping handler to immediately clear Render requirements """
-    data = await reader.read(1024)
-    request = data.decode('utf-8', errors='ignore')
-    
-    # Send a clean 200 OK JSON response without delaying the system thread
-    response = (
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: application/json\r\n"
-        "Connection: close\r\n\r\n"
-        '{"status": "alive", "msg": "Async Service Operational"}'
-    )
-    writer.write(response.encode('utf-8'))
-    await writer.drain()
-    writer.close()
-    await writer.wait_closed()
+class LightHealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"status": "alive", "msg": "Web Interface Active"}')
+    def log_message(self, format, *args): return
 
-async def start_async_health_server():
+def run_health_server():
     port = int(os.environ.get("PORT", 10000))
-    server = await asyncio.start_server(handle_http_request, "0.0.0.0", port)
-    print(f"[WEB LAYER] Non-blocking server listening on port {port}...")
-    async with server:
-        await server.serve_forever()
+    server = HTTPServer(("0.0.0.0", port), LightHealthCheckHandler)
+    server.serve_forever()
 
-# =====================================================================
-# ⚙️ 3. ASYNC STARTUP RUNNER
-# =====================================================================
-async def main_runner():
-    # 1. Fire up the Web Layer inside the same event loop task system
-    asyncio.create_task(start_async_health_server())
-
-    # 2. Setup and run Highrise SDK client immediately alongside it
-    ROOM_ID = os.environ.get("HIGHRISE_ROOM_ID", "6a28b5b000b6151bd4c9641e")
-    API_TOKEN = os.environ.get("HIGHRISE_API_TOKEN", "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92")
-    
-    from highrise.__main__ import main, BotDefinition
-    
-    bot_instance = SecurityRoomBot()
-    bot_instance.owner_username = os.environ.get("BOT_OWNER_USERNAME", "sadi_key")
-    
-    definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
-    print("[MAIN ENGINE] Launching integrated Highrise Client...")
-    await main(definitions=definitions)
-
-if __name__ == "__main__":
-    # Start both services smoothly together on a single clean event loop execution
-    try:
-        asyncio.run(main_runner())
-    except KeyboardInterrupt:
-        print("Bot stopped manually.")
+# Automatically spin up the port listener when imported or invoked
+web_worker = threading.Thread(target=run_health_server, daemon=True)
+web_worker.start()
+print("[WEB RUNNER] Active background listening port engaged.")
