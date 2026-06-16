@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Scratch Web Service Edition
+Highrise Room Management Bot - Door Welcome Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -51,7 +51,9 @@ class SecurityRoomBot(BaseBot):
         self.owner_id = None  
         self.bot_id = None
         
-        self.bot_spawn_position = Position(14.0, 2.0, 37.0, facing="FrontRight")
+        # 📍 CHANGED: Bot now spawns directly near the door join point!
+        self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
+        
         self.vip_spawn_points = [
             Position(26.75, 23.0, 23.35, facing="FrontRight"),
             Position(19.00070, 23.0, 33.99, facing="FrontRight"),
@@ -223,8 +225,6 @@ class SecurityRoomBot(BaseBot):
                     await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
                 except Exception as tp_down_err: print(f"[TP DOWN ERROR] {tp_down_err}")
 
-# =====================================================================
-# ⚙️ 3. RUNTIME PROCESS MANAGER
 # =====================================================================
 # ⚙️ 3. RUNTIME PROCESS MANAGER
 # =====================================================================
