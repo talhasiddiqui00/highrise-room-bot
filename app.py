@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Auto-Anchor Spawn Edition
+Highrise Room Management Bot - Server Persistent Anchor Build
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -32,7 +32,7 @@ class SecurityRoomBot(BaseBot):
         self.bot_id = None
         self.last_highrise_activity = time.time()
         
-        # 📍 TARGET LOCATION: Bot will force-spawn and hold this exact spot
+        # 📍 TARGET LOCATION: Bot will force-spawn and hold this exact spot permanently
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -69,9 +69,9 @@ class SecurityRoomBot(BaseBot):
         print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         self.last_highrise_activity = time.time()
         
-        # 🚀 STABILIZED INITIAL SPAWN SEQUENCE
+        # 🚀 STABILIZED SPAWN SEQUENCE
         async def force_spawn_teleport():
-            # Gives the room server 5 full seconds to fully render the bot avatar first
+            # Give the room server 5 full seconds to safely render the bot avatar first
             await asyncio.sleep(5.0)
             try:
                 print(f"[SPAWN FORCE] Teleporting bot to custom coordinates: {self.bot_spawn_position}")
@@ -79,13 +79,13 @@ class SecurityRoomBot(BaseBot):
             except Exception as e:
                 print(f"[SPAWN ERROR] Initial placement missed: {e}")
                 
-        # Fire off concurrent tracking workers securely
+        # Fire off tasks cleanly
         asyncio.create_task(force_spawn_teleport())
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
 
     async def connection_watchdog_loop(self) -> None:
-        # Secondary insurance check: guarantees placement right after loading gates clear
+        # Initial insurance check right after loading gates clear
         await asyncio.sleep(15)
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
@@ -97,7 +97,7 @@ class SecurityRoomBot(BaseBot):
                 await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
                 
-                # Continuous Drift Anchor: Forces the bot to snap back if bumped or reset
+                # Continuous Drift Anchor: Keeps bot locked at your spot even if owner leaves
                 await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             except Exception:
                 pass
@@ -120,7 +120,10 @@ class SecurityRoomBot(BaseBot):
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
         self.last_highrise_activity = time.time()
         if user.id == self.bot_id or "bot" in user.username.lower(): return
-        if user.username.lower() == self.owner_username.lower(): self.owner_id = user.id
+        
+        # Always remember owner regardless of runtime state
+        if user.username.lower() == self.owner_username.lower(): 
+            self.owner_id = user.id
 
         try:
             welcome_text = (
@@ -140,6 +143,11 @@ class SecurityRoomBot(BaseBot):
                     print(f"[TIP ERROR] Welcome gift failed: {tip_err}")
         except Exception as e:
             print(f"[JOIN ERROR] Failure processing: {e}")
+
+    async def on_user_leave(self, user: User) -> None:
+        self.last_highrise_activity = time.time()
+        # Clean background log trace, bot will remain fully operational inside room
+        print(f"[ROOM LEAVE] {user.username} departed. Bot remains active.")
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -184,6 +192,8 @@ class SecurityRoomBot(BaseBot):
 
     async def on_chat(self, user: User, message: str) -> None:
         self.last_highrise_activity = time.time()
+        
+        # Fixed Check: Track owner firmly by username string so leaving doesn't break verification
         if user.username.lower() == self.owner_username.lower():
             clean_msg = message.lower().strip()
             
