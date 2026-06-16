@@ -1,8 +1,8 @@
 """
-Highrise Room Management Bot - Safe Request Keep-Alive Edition
+Highrise Room Management Bot - Restored Stable Core Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 Developer: sadi_key
-Fixes: Changed whisper keepalive to get_wallet keepalive to prevent instant login rejection.
+Fixes: Reverted to the stable, long-lasting connection loops with zero-spam login configuration.
 """
 
 import sys
@@ -103,22 +103,8 @@ class SecurityRoomBot(BaseBot):
             # Start background execution loops
             asyncio.create_task(self.start_announcement_loop())
             asyncio.create_task(self.start_heartbeat_watchdog())  
-            asyncio.create_task(self.start_self_ping_loop()) 
         except Exception as e:
             print(f"[ERROR CATCH] Core initialization failed: {e}")
-
-    async def start_self_ping_loop(self) -> None:
-        """Requests wallet details every 2 minutes. Safe, completely silent, and updates network data."""
-        await asyncio.sleep(30)
-        while True:
-            try:
-                if self.bot_id:
-                    # FIX: Replaced whisper with wallet check. Completely invisible to players.
-                    await self.highrise.get_wallet()
-                    print("[AMPLIFIER] Sent secure internal data ping to keep connection awake.")
-            except Exception as e:
-                print(f"[PING WARNING] Internal ping pulse missed: {e}")
-            await asyncio.sleep(120) 
 
     async def start_heartbeat_watchdog(self) -> None:
         global LAST_NETWORK_ACTIVITY
@@ -133,6 +119,7 @@ class SecurityRoomBot(BaseBot):
         global LAST_NETWORK_ACTIVITY
         while True:
             try:
+                # Force wait 5 minutes BEFORE sending the first announcement
                 await asyncio.sleep(300)  
                 await self.highrise.chat(
                     "📢 Tip 500g to become permanent VIP! Invite your friends to this public hangout place "
