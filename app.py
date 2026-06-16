@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Fresh Account Build
+Highrise Room Management Bot - Auto-Anchor Spawn Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -32,7 +32,7 @@ class SecurityRoomBot(BaseBot):
         self.bot_id = None
         self.last_highrise_activity = time.time()
         
-        # 📍 TARGET LOCATION: Bot spawns directly where people walk in
+        # 📍 TARGET LOCATION: Bot will force-spawn and hold this exact spot
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -68,22 +68,37 @@ class SecurityRoomBot(BaseBot):
 
         print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         self.last_highrise_activity = time.time()
-        try:
-            await asyncio.sleep(2.5)
-            print(f"[SPAWN FORCE] Teleporting bot to door position: {self.bot_spawn_position}")
-            await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
-            
-            asyncio.create_task(self.start_announcement_loop())
-            asyncio.create_task(self.connection_watchdog_loop())
-        except Exception as e:
-            print(f"[CRITICAL ERROR] Spawn failure: {e}")
+        
+        # 🚀 STABILIZED INITIAL SPAWN SEQUENCE
+        async def force_spawn_teleport():
+            # Gives the room server 5 full seconds to fully render the bot avatar first
+            await asyncio.sleep(5.0)
+            try:
+                print(f"[SPAWN FORCE] Teleporting bot to custom coordinates: {self.bot_spawn_position}")
+                await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
+            except Exception as e:
+                print(f"[SPAWN ERROR] Initial placement missed: {e}")
+                
+        # Fire off concurrent tracking workers securely
+        asyncio.create_task(force_spawn_teleport())
+        asyncio.create_task(self.start_announcement_loop())
+        asyncio.create_task(self.connection_watchdog_loop())
 
     async def connection_watchdog_loop(self) -> None:
+        # Secondary insurance check: guarantees placement right after loading gates clear
+        await asyncio.sleep(15)
+        try:
+            await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
+        except Exception: pass
+
         while True:
             await asyncio.sleep(60)
             try:
                 await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
+                
+                # Continuous Drift Anchor: Forces the bot to snap back if bumped or reset
+                await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             except Exception:
                 pass
                 
