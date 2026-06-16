@@ -226,8 +226,10 @@ class SecurityRoomBot(BaseBot):
 # =====================================================================
 # ⚙️ 3. RUNTIME PROCESS MANAGER
 # =====================================================================
+# ⚙️ 3. RUNTIME PROCESS MANAGER
+# =====================================================================
 def launch_game_bot():
-    """ Runs completely isolated inside its own process loop """
+    """ Runs isolated inside its own process loop safely """
     ROOM_ID = os.environ.get("HIGHRISE_ROOM_ID", "6a28b5b000b6151bd4c9641e")
     API_TOKEN = os.environ.get("HIGHRISE_API_TOKEN", "43b31f6cce5c48257110021c11d9a509334e73b684836a545c0f67e33fc4ed92")
     
@@ -244,4 +246,12 @@ def launch_game_bot():
         definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
         loop.run_until_complete(main(definitions=definitions))
     except Exception as err:
-        print(f"
+        print(f"[PROCESS CRASH] Connection interrupted: {err}")
+
+if __name__ == "__main__":
+    # 1. Fire up the Highrise Bot inside its own completely safe background process
+    bot_worker = Process(target=launch_game_bot, daemon=True)
+    bot_worker.start()
+    
+    # 2. Run the simple built-in HTTP health checker on the main thread to satisfy Render's port listener
+    run_health_server()
