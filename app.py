@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Player Avatar Emote Loop Fix
+Highrise Room Management Bot - Stable Production Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -108,7 +108,7 @@ EMOTE_MAP = {
     "cold": {"id": "emote-cold", "duration": 3.664348},
     "charging": {"id": "emote-charging", "duration": 8.025079},
     "bunnyhop": {"id": "emote-bunnyhop", "duration": 12.380685},
-    "bow": {"id": "emote-bow", "duration": 3.344036},
+    "bow": {"id": "bow", "duration": 3.344036},
     "boo": {"id": "emote-boo", "duration": 4.501502},
     "homerun": {"id": "emote-baseball", "duration": 7.254841},
     "fallingapart": {"id": "emote-apart", "duration": 4.809542},
@@ -220,6 +220,7 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(60)
             try:
+                # SAFE CHECK: Caught internally to prevent loops from instantly crashing entire thread pipelines
                 await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
                 
@@ -232,7 +233,7 @@ class SecurityRoomBot(BaseBot):
                                 await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
                         break
             except Exception as e:
-                print(f"[WATCHDOG KICK] Room likely closed or empty: {e}")
+                print(f"[WATCHDOG PASS] API method temporary slip: {e}")
                 
             if time.time() - self.last_highrise_activity > 480:
                 print("[CRITICAL ALERT] Game connection frozen entirely. Hard cycling container...")
@@ -281,9 +282,7 @@ class SecurityRoomBot(BaseBot):
             while True:
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
-                
-                # FIXED SDK SIGNATURE: send_emote takes (emote_id, target_user_id)
-                # Passing user_id causes that specific player to perform the emote animation.
+                # Fixed parameter logic for standard operations targeting users
                 await self.highrise.send_emote(emote_id, user_id)
                 await asyncio.sleep(duration)
         except asyncio.CancelledError:
