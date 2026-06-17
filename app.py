@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Persistent & Emote Loop Edition
+Highrise Room Management Bot - Persistent, Emote Loop & Clean Announcement Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -166,7 +166,7 @@ class SecurityRoomBot(BaseBot):
         super().__init__()
         self.vip_users = []      
         self.tipped_users = []   
-        self.active_emote_loops = {} # Dynamic container for looped tasks
+        self.active_emote_loops = {} 
         self.owner_username = "sadi_key"
         self.owner_id = None  
         self.bot_id = None
@@ -238,13 +238,15 @@ class SecurityRoomBot(BaseBot):
                 print("[CRITICAL ALERT] Game connection frozen entirely. Hard cycling container...")
                 sys.exit(1)
 
+    # Clean public announcement pathway loop
     async def start_announcement_loop(self) -> None:
         while True:
             try:
                 await asyncio.sleep(300)  
                 await self.highrise.chat(
-                    "📢 Tip 500g to become permanent VIP! Invite your friends to this public hangout place "
-                    "and have tips and fun. Apply for MOD DM @sadi_key ✨"
+                    "✨ Type !help to see commands! Tip 500g for permanent VIP 👑 | "
+                    "To loop an emote, type '!loop <name>' and type '!stop' to halt 🕺 | "
+                    "Let's hang out and spread love! ❤️"
                 )
             except Exception: pass
 
@@ -272,12 +274,8 @@ class SecurityRoomBot(BaseBot):
 
     async def on_user_leave(self, user: User) -> None:
         self.last_highrise_activity = time.time()
-        # Ensure loops cleanly close if player leaves mid-dance
         asyncio.create_task(self.stop_emote(user.id))
 
-    # =====================================================================
-    # 🕺 INTEGRATED ASYNC EMOTE MOTOR PIPELINES
-    # =====================================================================
     async def loop_emote(self, user_id: str, emote_id: str, duration: float) -> None:
         try:
             while True:
@@ -360,7 +358,6 @@ class SecurityRoomBot(BaseBot):
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
-                # Register task thread
                 task = asyncio.create_task(self.loop_emote(user.id, emote_id, duration))
                 self.active_emote_loops[user.id] = {"emote_id": emote_id, "task": task}
                 await self.highrise.send_whisper(user.id, f"🕺 Started loop for '{emote_name}'. Type '!stop' to halt.")
