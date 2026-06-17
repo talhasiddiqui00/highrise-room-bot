@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Player Emote Loop & Instant Announcement Edition
+Highrise Room Management Bot - Player Avatar Emote Loop & Professional Announcement Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -241,11 +241,11 @@ class SecurityRoomBot(BaseBot):
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                # Send immediately on launch/re-entry, THEN sleep
+                # Fixed: Professional layout broadcasting instantly on join, looping every 5 min
                 await self.highrise.chat(
-                    "✨ Type !help to see commands! Tip 500g for permanent VIP 👑 | "
-                    "To loop an emote, type '!loop <name>' and type '!stop' to halt 🕺 | "
-                    "Let's hang out and spread love! ❤️"
+                    "✨ Welcome to our space! Type !help to discover commands. Want to see your avatar dance? "
+                    "Type '!loop <emote_name>' and use '!stop' to halt. Enjoy all emotes! "
+                    "Support our room by tipping 500g for permanent VIP access. Let's hang out and spread love! ❤️"
                 )
                 await asyncio.sleep(300)  
             except Exception: 
@@ -282,7 +282,7 @@ class SecurityRoomBot(BaseBot):
             while True:
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
-                # TARGET FIXED: Triggers emote on the actual user_id, not the bot!
+                # Fixed: Correctly target user_id so the command sender's own avatar loops
                 await self.highrise.send_emote(emote_id, user_id)
                 await asyncio.sleep(duration)
         except asyncio.CancelledError:
