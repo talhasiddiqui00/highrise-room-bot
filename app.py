@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Stable Production Edition
+Highrise Room Management Bot - Official Highrise Emote Loop Integration
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -108,7 +108,7 @@ EMOTE_MAP = {
     "cold": {"id": "emote-cold", "duration": 3.664348},
     "charging": {"id": "emote-charging", "duration": 8.025079},
     "bunnyhop": {"id": "emote-bunnyhop", "duration": 12.380685},
-    "bow": {"id": "bow", "duration": 3.344036},
+    "bow": {"id": "emote-bow", "duration": 3.344036},
     "boo": {"id": "emote-boo", "duration": 4.501502},
     "homerun": {"id": "emote-baseball", "duration": 7.254841},
     "fallingapart": {"id": "emote-apart", "duration": 4.809542},
@@ -157,6 +157,43 @@ EMOTE_MAP = {
     "astronaut": {"id": "emote-astronaut", "duration": 13.791175},
     "dancezombie": {"id": "dance-zombie", "duration": 14.1}
 }
+
+# =====================================================================
+# 🛠️ OFFICIAL HIGHRISE STANDALONE EMOTE FUNCTIONS
+# =====================================================================
+async def loop_emote(bot, user_id: str, emote_id: str, duration: float) -> None:
+    try:
+        while True:
+            if user_id not in bot.active_emote_loops or bot.active_emote_loops[user_id]["emote_id"] != emote_id:
+                break
+            await bot.highrise.send_emote(emote_id, user_id)
+            await asyncio.sleep(duration)
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        print(f"Error in loop_emote for user {user_id}: {e}")
+        try:
+            await bot.highrise.send_whisper(user_id, f"Error performing emote: {e}")
+        except Exception as e2:
+            print(f"Error sending error whisper in loop_emote: {e2}")
+    finally:
+        if user_id in bot.active_emote_loops and bot.active_emote_loops[user_id]["emote_id"] == emote_id:
+            del bot.active_emote_loops[user_id]
+
+async def stop_emote(bot, user_id: str) -> None:
+    try:
+        if user_id in bot.active_emote_loops:
+            task = bot.active_emote_loops[user_id]["task"]
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            if user_id in bot.active_emote_loops:
+                del bot.active_emote_loops[user_id]
+    except Exception as e:
+        print(f"Error stopping emote for user {user_id}: {e}")
+
 
 # =====================================================================
 # 🤖 1. HIGHRISE CORE GAME ENGINE
@@ -220,7 +257,6 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(60)
             try:
-                # SAFE CHECK: Caught internally to prevent loops from instantly crashing entire thread pipelines
                 await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
                 
@@ -275,37 +311,8 @@ class SecurityRoomBot(BaseBot):
 
     async def on_user_leave(self, user: User) -> None:
         self.last_highrise_activity = time.time()
-        asyncio.create_task(self.stop_emote(user.id))
-
-    async def loop_emote(self, user_id: str, emote_id: str, duration: float) -> None:
-        try:
-            while True:
-                if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
-                    break
-                # Fixed parameter logic for standard operations targeting users
-                await self.highrise.send_emote(emote_id, user_id)
-                await asyncio.sleep(duration)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            print(f"Error in player loop_emote execution for {user_id}: {e}")
-        finally:
-            if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
-                del self.active_emote_loops[user_id]
-
-    async def stop_emote(self, user_id: str) -> None:
-        try:
-            if user_id in self.active_emote_loops:
-                task = self.active_emote_loops[user_id]["task"]
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-                if user_id in self.active_emote_loops:
-                    del self.active_emote_loops[user_id]
-        except Exception as e:
-            print(f"Error clearing loop task for player {user_id}: {e}")
+        # Wired directly to the Highrise external helper function snippet
+        asyncio.create_task(stop_emote(self, user.id))
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -353,19 +360,21 @@ class SecurityRoomBot(BaseBot):
         if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
-                await self.stop_emote(user.id)
+                # 1. Clear previous tasks via Highrise official stop handler
+                await stop_emote(self, user.id)
                 
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
-                task = asyncio.create_task(self.loop_emote(user.id, emote_id, duration))
+                # 2. Inject official loop structure dynamically passing self as context parameter
+                task = asyncio.create_task(loop_emote(self, user.id, emote_id, duration))
                 self.active_emote_loops[user.id] = {"emote_id": emote_id, "task": task}
                 await self.highrise.send_whisper(user.id, f"🕺 Your avatar is now looping '{emote_name}'. Type '!stop' to halt.")
             else:
                 await self.highrise.send_whisper(user.id, "❌ Unknown dance name. Check spelling format!")
                 
         elif clean_msg == "!stop":
-            await self.stop_emote(user.id)
+            await stop_emote(self, user.id)
             await self.highrise.send_whisper(user.id, "🛑 Your avatar's dance loop has been stopped.")
 
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
