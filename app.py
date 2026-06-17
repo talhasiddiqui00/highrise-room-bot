@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Ultimate Persistence & Economy Edition
+Highrise Room Management Bot - Persistent & Emote Loop Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -19,6 +19,145 @@ from highrise.models import SessionMetadata, CurrencyItem, Item
 
 MEMORY_FILE = "tipped_users.txt"
 
+EMOTE_MAP = {
+    "rest": {"id": "sit-open", "duration": 17.062613},
+    "zombie": {"id": "idle_zombie", "duration": 28.754937},
+    "relaxed": {"id": "idle_layingdown2", "duration": 21.546653},
+    "attentive": {"id": "idle_layingdown", "duration": 24.585168},
+    "sleepy": {"id": "idle-sleep", "duration": 22.620446},
+    "poutyface": {"id": "idle-sad", "duration": 24.377214},
+    "posh": {"id": "idle-posh", "duration": 21.851256},
+    "tired": {"id": "idle-loop-tired", "duration": 21.959007},
+    "taploop": {"id": "idle-loop-tapdance", "duration": 6.261593},
+    "sit": {"id": "idle-loop-sitfloor", "duration": 22.321055},
+    "shy": {"id": "idle-loop-shy", "duration": 16.47449},
+    "bummed": {"id": "idle-loop-sad", "duration": 6.052999},
+    "chillin": {"id": "idle-loop-happy", "duration": 18.798322},
+    "annoyed": {"id": "idle-loop-annoyed", "duration": 17.058522},
+    "aerobics": {"id": "idle-loop-aerobics", "duration": 8.507535},
+    "ponder": {"id": "idle-lookup", "duration": 22.339865},
+    "heropose": {"id": "idle-hero", "duration": 21.877099},
+    "relaxing": {"id": "idle-floorsleeping2", "duration": 17.253372},
+    "cozynap": {"id": "idle-floorsleeping", "duration": 13.935264},
+    "enthused": {"id": "idle-enthusiastic", "duration": 15.941537},
+    "feelthebeat": {"id": "idle-dance-headbobbing", "duration": 25.367458},
+    "irritated": {"id": "idle-angry", "duration": 25.427848},
+    "fastsing": {"id": "emote-sicklycute-sing-fast", "duration": 10},
+    "slowsing": {"id": "emote-sicklycute-sing-slow", "duration": 10},
+    "yes": {"id": "emote-yes", "duration": 2.565001},
+    "ibelieveicanfly": {"id": "emote-wings", "duration": 13.134487},
+    "thewave": {"id": "emote-wave", "duration": 2.690873},
+    "think": {"id": "emote-think", "duration": 3.691104},
+    "theatrical": {"id": "emote-theatrical", "duration": 8.591869},
+    "tapdance": {"id": "emote-tapdance", "duration": 11.057294},
+    "superrun": {"id": "emote-superrun", "duration": 6.273226},
+    "superpunch": {"id": "emote-superpunch", "duration": 3.751054},
+    "sumofight": {"id": "emote-sumo", "duration": 10.868834},
+    "thumbsuck": {"id": "emote-suckthumb", "duration": 4.185944},
+    "splitsdrop": {"id": "emote-splitsdrop", "duration": 4.46931},
+    "snowballfight": {"id": "emote-snowball", "duration": 5.230467},
+    "snowangel": {"id": "emote-snowangel", "duration": 6.218627},
+    "handshake": {"id": "emote-secrethandshake", "duration": 3.879024},
+    "sad": {"id": "emote-sad", "duration": 5.411073},
+    "pull": {"id": "emote-ropepull", "duration": 8.769656},
+    "roll": {"id": "emote-roll", "duration": 3.560517},
+    "rofl": {"id": "emote-rofl", "duration": 6.314731},
+    "robot": {"id": "emote-robot", "duration": 7.607362},
+    "rainbow": {"id": "emote-rainbow", "duration": 2.813373},
+    "proposing": {"id": "emote-proposing", "duration": 4.27888},
+    "peekaboo": {"id": "emote-peekaboo", "duration": 3.629867},
+    "peace": {"id": "emote-peace", "duration": 5.755004},
+    "panic": {"id": "emote-panic", "duration": 2.850966},
+    "no": {"id": "emote-no", "duration": 2.703034},
+    "ninjarun": {"id": "emote-ninjarun", "duration": 4.754721},
+    "nightfever": {"id": "emote-nightfever", "duration": 5.488424},
+    "monsterfail": {"id": "emote-monster_fail", "duration": 4.632708},
+    "model": {"id": "emote-model", "duration": 6.490173},
+    "levelup": {"id": "emote-levelup", "duration": 6.0545},
+    "amused": {"id": "emote-laughing2", "duration": 5.056641},
+    "laugh": {"id": "emote-laughing", "duration": 2.69161},
+    "kiss": {"id": "emote-kiss", "duration": 2.387175},
+    "superkick": {"id": "emote-kicking", "duration": 4.867992},
+    "jump": {"id": "emote-jumpb", "duration": 3.584234},
+    "judochop": {"id": "emote-judochop", "duration": 2.427442},
+    "jetpack": {"id": "emote-jetpack", "duration": 16.759457},
+    "hugyourself": {"id": "emote-hugyourself", "duration": 4.992751},
+    "sweating": {"id": "emote-hot", "duration": 4.353037},
+    "hello": {"id": "emote-hello", "duration": 2.734844},
+    "harlemshake": {"id": "emote-harlemshake", "duration": 13.558597},
+    "happy": {"id": "emote-happy", "duration": 3.483462},
+    "handstand": {"id": "emote-handstand", "duration": 4.015678},
+    "greedyemote": {"id": "emote-greedy", "duration": 4.639828},
+    "moonwalk": {"id": "emote-gordonshuffle", "duration": 8.052307},
+    "ghostfloat": {"id": "emote-ghost-idle", "duration": 19.570492},
+    "gangnamstyle": {"id": "emote-gangnam", "duration": 7.275486},
+    "faint": {"id": "emote-fainting", "duration": 18.423499},
+    "clumsy": {"id": "emote-fail2", "duration": 6.475972},
+    "fall": {"id": "emote-fail1", "duration": 5.617942},
+    "facepalm": {"id": "emote-exasperatedb", "duration": 2.722748},
+    "exasperated": {"id": "emote-exasperated", "duration": 2.367483},
+    "elbowbump": {"id": "emote-elbowbump", "duration": 3.799768},
+    "disco": {"id": "emote-disco", "duration": 5.366973},
+    "blastoff": {"id": "emote-disappear", "duration": 6.195985},
+    "faintdrop": {"id": "emote-deathdrop", "duration": 3.762728},
+    "collapse": {"id": "emote-death2", "duration": 4.855549},
+    "revival": {"id": "emote-death", "duration": 6.615967},
+    "dab": {"id": "emote-dab", "duration": 2.717871},
+    "curtsy": {"id": "emote-curtsy", "duration": 2.425714},
+    "confusion": {"id": "emote-confused", "duration": 8.578827},
+    "cold": {"id": "emote-cold", "duration": 3.664348},
+    "charging": {"id": "emote-charging", "duration": 8.025079},
+    "bunnyhop": {"id": "emote-bunnyhop", "duration": 12.380685},
+    "bow": {"id": "emote-bow", "duration": 3.344036},
+    "boo": {"id": "emote-boo", "duration": 4.501502},
+    "homerun": {"id": "emote-baseball", "duration": 7.254841},
+    "fallingapart": {"id": "emote-apart", "duration": 4.809542},
+    "thumbsup": {"id": "emoji-thumbsup", "duration": 2.702369},
+    "point": {"id": "emoji-there", "duration": 2.059095},
+    "sneeze": {"id": "emoji-sneeze", "duration": 2.996694},
+    "smirk": {"id": "emoji-smirking", "duration": 4.823158},
+    "sick": {"id": "emoji-sick", "duration": 5.070367},
+    "gasp": {"id": "emoji-scared", "duration": 3.008487},
+    "punch": {"id": "emoji-punch", "duration": 1.755783},
+    "pray": {"id": "emoji-pray", "duration": 4.503179},
+    "stinky": {"id": "emoji-poop", "duration": 4.795735},
+    "naughty": {"id": "emoji-naughty", "duration": 4.277602},
+    "mindblown": {"id": "emoji-mind-blown", "duration": 2.397167},
+    "lying": {"id": "emoji-lying", "duration": 6.313748},
+    "levitate": {"id": "emoji-halo", "duration": 5.837754},
+    "fireballlunge": {"id": "emoji-hadoken", "duration": 2.723709},
+    "giveup": {"id": "emoji-give-up", "duration": 5.407888},
+    "tummyache": {"id": "emoji-gagging", "duration": 5.500202},
+    "stunned": {"id": "emoji-dizzy", "duration": 4.053049},
+    "sob": {"id": "emoji-crying", "duration": 3.696499},
+    "clap": {"id": "emoji-clapping", "duration": 2.161757},
+    "raisetheroof": {"id": "emoji-celebrate", "duration": 3.412258},
+    "arrogance": {"id": "emoji-arrogance", "duration": 6.869441},
+    "angry": {"id": "emoji-angry", "duration": 5.760023},
+    "voguehands": {"id": "dance-voguehands", "duration": 9.150634},
+    "savagedance": {"id": "dance-tiktok8", "duration": 10.938702},
+    "dontstartnow": {"id": "dance-tiktok2", "duration": 10.392353},
+    "smoothwalk": {"id": "dance-smoothwalk", "duration": 6.690023},
+    "ringonit": {"id": "dance-singleladies", "duration": 21.191372},
+    "letsgoshopping": {"id": "dance-shoppingcart", "duration": 4.316035},
+    "russian": {"id": "dance-russian", "duration": 10.252905},
+    "pennywise": {"id": "dance-pennywise", "duration": 1.214349},
+    "orangejuicedance": {"id": "dance-orangejustice", "duration": 6.475263},
+    "rockout": {"id": "dance-metal", "duration": 15.076377},
+    "macarena": {"id": "dance-macarena", "duration": 12.214141},
+    "handsintheair": {"id": "dance-handsup", "duration": 22.283413},
+    "duckwalk": {"id": "dance-duckwalk", "duration": 11.748784},
+    "kpopdance": {"id": "dance-blackpink", "duration": 7.150958},
+    "pushups": {"id": "dance-aerobics", "duration": 8.796402},
+    "hyped": {"id": "emote-hyped", "duration": 7.492423},
+    "jinglebell": {"id": "dance-jinglebell", "duration": 11},
+    "nervous": {"id": "idle-nervous", "duration": 21.714221},
+    "toilet": {"id": "idle-toilet", "duration": 32.174447},
+    "attention": {"id": "emote-attention", "duration": 4.401206},
+    "astronaut": {"id": "emote-astronaut", "duration": 13.791175},
+    "dancezombie": {"id": "dance-zombie", "duration": 14.1}
+}
+
 # =====================================================================
 # 🤖 1. HIGHRISE CORE GAME ENGINE
 # =====================================================================
@@ -27,12 +166,12 @@ class SecurityRoomBot(BaseBot):
         super().__init__()
         self.vip_users = []      
         self.tipped_users = []   
+        self.active_emote_loops = {} # Dynamic container for looped tasks
         self.owner_username = "sadi_key"
         self.owner_id = None  
         self.bot_id = None
         self.last_highrise_activity = time.time()
         
-        # 📍 TARGET LOCATION: Bot will hold this exact spot naturally
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -69,13 +208,11 @@ class SecurityRoomBot(BaseBot):
         print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         self.last_highrise_activity = time.time()
         
-        # Initial placement right out of the gate
         await asyncio.sleep(3.0)
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
         except Exception: pass
                 
-        # Start background runtime tasks safely
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
 
@@ -83,16 +220,13 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(60)
             try:
-                # 1. Keep alive ping
                 await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
                 
-                # 2. Smart Drift Anchor: Only teleports if bumped or moved away!
                 room_users = await self.highrise.get_room_users()
                 for user, position in room_users.content:
                     if user.id == self.bot_id:
                         if isinstance(position, Position):
-                            # If bot drifted away from target coordinates, snap it back cleanly
                             if abs(position.x - 14.0) > 0.5 or abs(position.z - 31.0) > 0.5:
                                 print("[ANCHOR] Bot drifted. Re-centering position smoothly.")
                                 await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
@@ -100,7 +234,6 @@ class SecurityRoomBot(BaseBot):
             except Exception as e:
                 print(f"[WATCHDOG KICK] Room likely closed or empty: {e}")
                 
-            # If server hasn't responded in 8 minutes, force Render to restart the engine completely
             if time.time() - self.last_highrise_activity > 480:
                 print("[CRITICAL ALERT] Game connection frozen entirely. Hard cycling container...")
                 sys.exit(1)
@@ -139,6 +272,43 @@ class SecurityRoomBot(BaseBot):
 
     async def on_user_leave(self, user: User) -> None:
         self.last_highrise_activity = time.time()
+        # Ensure loops cleanly close if player leaves mid-dance
+        asyncio.create_task(self.stop_emote(user.id))
+
+    # =====================================================================
+    # 🕺 INTEGRATED ASYNC EMOTE MOTOR PIPELINES
+    # =====================================================================
+    async def loop_emote(self, user_id: str, emote_id: str, duration: float) -> None:
+        try:
+            while True:
+                if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
+                    break
+                await self.highrise.send_emote(emote_id, user_id)
+                await asyncio.sleep(duration)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Error in loop_emote for user {user_id}: {e}")
+            try:
+                await self.highrise.send_whisper(user_id, f"Error performing emote: {e}")
+            except Exception: pass
+        finally:
+            if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
+                del self.active_emote_loops[user_id]
+
+    async def stop_emote(self, user_id: str) -> None:
+        try:
+            if user_id in self.active_emote_loops:
+                task = self.active_emote_loops[user_id]["task"]
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                if user_id in self.active_emote_loops:
+                    del self.active_emote_loops[user_id]
+        except Exception as e:
+            print(f"Error stopping emote for user {user_id}: {e}")
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -182,6 +352,25 @@ class SecurityRoomBot(BaseBot):
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         
+        # --- 🌐 PUBLIC DANCE LOOP PARSER HANDLERS ---
+        if clean_msg.startswith("!loop "):
+            emote_name = clean_msg.replace("!loop ", "").strip()
+            if emote_name in EMOTE_MAP:
+                await self.stop_emote(user.id)
+                emote_id = EMOTE_MAP[emote_name]["id"]
+                duration = EMOTE_MAP[emote_name]["duration"]
+                
+                # Register task thread
+                task = asyncio.create_task(self.loop_emote(user.id, emote_id, duration))
+                self.active_emote_loops[user.id] = {"emote_id": emote_id, "task": task}
+                await self.highrise.send_whisper(user.id, f"🕺 Started loop for '{emote_name}'. Type '!stop' to halt.")
+            else:
+                await self.highrise.send_whisper(user.id, "❌ Unknown dance name. Check spelling format!")
+                
+        elif clean_msg == "!stop":
+            await self.stop_emote(user.id)
+            await self.highrise.send_whisper(user.id, "🛑 Your current dance loop has been stopped.")
+
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
             
@@ -216,7 +405,6 @@ class SecurityRoomBot(BaseBot):
                                 await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
                 except Exception as e: print(f"[GIFT FAIL] {e}")
 
-            # 🌟 NEW WORKING !GIVEALL COMMAND LOGIC
             elif clean_msg.startswith("!giveall "):
                 try:
                     parts = clean_msg.split()
@@ -224,13 +412,12 @@ class SecurityRoomBot(BaseBot):
                         amount_str = parts[1].replace("g", "")
                         if amount_str in ["1", "5", "10"]:
                             room_users = await self.highrise.get_room_users()
-                            # Loop over all active players inside your room
                             target_count = 0
                             for u, pos in room_users.content:
                                 if u.id != self.bot_id and u.username.lower() != self.owner_username.lower():
                                     target_count += 1
                                     asyncio.create_task(self.highrise.tip_user(u.id, f"gold_bar_{amount_str}"))
-                                    await asyncio.sleep(0.2) # anti-spam delay split
+                                    await asyncio.sleep(0.2)
                             
                             if target_count > 0:
                                 await self.highrise.chat(f"🎁 [RAIN DROP] @{self.owner_username} tipped {amount_str}g to all {target_count} players in the room! 🎉")
@@ -269,9 +456,9 @@ class SecurityRoomBot(BaseBot):
             if user.username.lower() == self.owner_username.lower():
                 await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user")
             elif user.id in self.vip_users:
-                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down'.")
+                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down'.\nDances: Type '!loop <name>' or '!stop'.")
             else:
-                await self.highrise.send_whisper(user.id, f"💡 Menu: Type '!vip' to verify access status. Tip 500g to unlock features!")
+                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Tip 500g to unlock features!\nDances: Type '!loop <name>' or '!stop'.")
                 
         elif clean_msg == "!vip":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
