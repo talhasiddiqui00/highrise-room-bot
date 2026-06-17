@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Stable Production Edition
+Highrise Room Management Bot - Targeted Player Emote Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -19,6 +19,7 @@ from highrise.models import SessionMetadata, CurrencyItem, Item
 
 MEMORY_FILE = "tipped_users.txt"
 
+# Map containing both targeted interactive animations and standard assets
 EMOTE_MAP = {
     "rest": {"id": "sit-open", "duration": 17.062613},
     "zombie": {"id": "idle_zombie", "duration": 28.754937},
@@ -159,20 +160,15 @@ EMOTE_MAP = {
 }
 
 # =====================================================================
-# 🛠️ BOT-ONLY EMOTE LOOPS (STOPS AVATAR INTERFERENCE)
+# ⚡ TARGETED PLAYER PERFORMANCE EXECUTION
 # =====================================================================
-async def loop_bot_emote(bot, emote_id: str, duration: float) -> None:
+async def run_target_player_emote(bot, emote_id: str, target_user_id: str) -> None:
     try:
-        while True:
-            if not bot.bot_is_looping or bot.current_bot_emote != emote_id:
-                break
-            # Empty second argument means the BOT performs the emote on ITSELF
-            await bot.highrise.send_emote(emote_id)
-            await asyncio.sleep(duration)
-    except asyncio.CancelledError:
-        pass
+        # Relies on highrise routing layout where providing the target string
+        # safely overrides execution context toward the typing user.
+        await bot.highrise.send_emote(emote_id, target_user_id)
     except Exception as e:
-        print(f"Error in bot loop execution: {e}")
+        print(f"[EMOTE EXECUTION FAIL] Failed targeting player context: {e}")
 
 # =====================================================================
 # 🤖 1. HIGHRISE CORE GAME ENGINE
@@ -182,9 +178,6 @@ class SecurityRoomBot(BaseBot):
         super().__init__()
         self.vip_users = []      
         self.tipped_users = []   
-        self.bot_is_looping = False
-        self.current_bot_emote = None
-        self.bot_loop_task = None
         self.owner_username = "sadi_key"
         self.owner_id = None  
         self.bot_id = None
@@ -260,9 +253,9 @@ class SecurityRoomBot(BaseBot):
         while True:
             try:
                 await self.highrise.chat(
-                    "✨ Welcome to our space! Type !help to discover commands. Want to see your avatar dance? "
-                    "Open your clothing menu and choose your style! "
-                    "Support our room by tipping 500g for permanent VIP access. Let's hang out and spread love! ❤️"
+                    "✨ Welcome to our space! Type !help to discover commands. "
+                    "Want to dance? Use '!loop <name>' and the bot will cast the connection straight to your avatar! "
+                    "Support our room by tipping 500g for permanent VIP access. ❤️"
                 )
                 await asyncio.sleep(300)  
             except Exception: 
@@ -335,30 +328,15 @@ class SecurityRoomBot(BaseBot):
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         
-        # --- 🌐 BOT EMOTE CONTROLLER ---
+        # --- 🌐 CONNECTED PLAYER EMOTE ROUTER ---
         if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
-                # Cancel previous bot animation task safely
-                self.bot_is_looping = False
-                if self.bot_loop_task:
-                    self.bot_loop_task.cancel()
-                
                 emote_id = EMOTE_MAP[emote_name]["id"]
-                duration = EMOTE_MAP[emote_name]["duration"]
-                
-                self.bot_is_looping = True
-                self.current_bot_emote = emote_id
-                self.bot_loop_task = asyncio.create_task(loop_bot_emote(self, emote_id, duration))
-                await self.highrise.send_whisper(user.id, f"🤖 I am now looping '{emote_name}' for you! Type '!stop' to make me standstill.")
+                # Create a task pointing straight to the player's session payload
+                asyncio.create_task(run_target_player_emote(self, emote_id, user.id))
             else:
                 await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Check your spelling configuration!")
-                
-        elif clean_msg == "!stop":
-            self.bot_is_looping = False
-            if self.bot_loop_task:
-                self.bot_loop_task.cancel()
-            await self.highrise.send_whisper(user.id, "🛑 Bot animations halted.")
 
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
@@ -445,9 +423,9 @@ class SecurityRoomBot(BaseBot):
             if user.username.lower() == self.owner_username.lower():
                 await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user")
             elif user.id in self.vip_users:
-                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down'.\nBot Dance: Type '!loop <name>' or '!stop'.")
+                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down' to travel between floors.\nEmote casting: Type '!loop <name>'.")
             else:
-                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Tip 500g to unlock features!\nBot Dance: Type '!loop <name>' or '!stop'.")
+                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote casting: Type '!loop <name>'.")
                 
         elif clean_msg == "!vip":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
