@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Player Avatar Emote Loop & Professional Announcement Edition
+Highrise Room Management Bot - Player Avatar Emote Loop Fix
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -241,7 +241,6 @@ class SecurityRoomBot(BaseBot):
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                # Updated professional layout announcement message
                 await self.highrise.chat(
                     "✨ Welcome to our space! Type !help to discover commands. Want to see your avatar dance? "
                     "Type '!loop <emote_name>' and use '!stop' to halt. Enjoy all emotes! "
@@ -280,11 +279,11 @@ class SecurityRoomBot(BaseBot):
     async def loop_emote(self, user_id: str, emote_id: str, duration: float) -> None:
         try:
             while True:
-                # Track the specific player ID loop state safely across the background thread
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
                 
-                # FORCE PLAYER TARGET: Targets the player user_id directly instead of self.bot_id
+                # FIXED SDK SIGNATURE: send_emote takes (emote_id, target_user_id)
+                # Passing user_id causes that specific player to perform the emote animation.
                 await self.highrise.send_emote(emote_id, user_id)
                 await asyncio.sleep(duration)
         except asyncio.CancelledError:
@@ -360,7 +359,6 @@ class SecurityRoomBot(BaseBot):
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
-                # Creates background tasks targeting user.id context completely
                 task = asyncio.create_task(self.loop_emote(user.id, emote_id, duration))
                 self.active_emote_loops[user.id] = {"emote_id": emote_id, "task": task}
                 await self.highrise.send_whisper(user.id, f"🕺 Your avatar is now looping '{emote_name}'. Type '!stop' to halt.")
