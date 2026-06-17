@@ -241,7 +241,7 @@ class SecurityRoomBot(BaseBot):
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                # Fixed: Professional layout broadcasting instantly on join, looping every 5 min
+                # Updated professional layout announcement message
                 await self.highrise.chat(
                     "✨ Welcome to our space! Type !help to discover commands. Want to see your avatar dance? "
                     "Type '!loop <emote_name>' and use '!stop' to halt. Enjoy all emotes! "
@@ -280,15 +280,17 @@ class SecurityRoomBot(BaseBot):
     async def loop_emote(self, user_id: str, emote_id: str, duration: float) -> None:
         try:
             while True:
+                # Track the specific player ID loop state safely across the background thread
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
-                # Fixed: Correctly target user_id so the command sender's own avatar loops
+                
+                # FORCE PLAYER TARGET: Targets the player user_id directly instead of self.bot_id
                 await self.highrise.send_emote(emote_id, user_id)
                 await asyncio.sleep(duration)
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"Error in loop_emote for user {user_id}: {e}")
+            print(f"Error in player loop_emote execution for {user_id}: {e}")
         finally:
             if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
                 del self.active_emote_loops[user_id]
@@ -305,7 +307,7 @@ class SecurityRoomBot(BaseBot):
                 if user_id in self.active_emote_loops:
                     del self.active_emote_loops[user_id]
         except Exception as e:
-            print(f"Error stopping emote for user {user_id}: {e}")
+            print(f"Error clearing loop task for player {user_id}: {e}")
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -349,23 +351,25 @@ class SecurityRoomBot(BaseBot):
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         
-        # --- 🌐 PUBLIC DANCE LOOP PARSER HANDLERS ---
+        # --- 🌐 PLAYER AVATAR DANCE LOOP PARSER HANDLERS ---
         if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
                 await self.stop_emote(user.id)
+                
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
+                # Creates background tasks targeting user.id context completely
                 task = asyncio.create_task(self.loop_emote(user.id, emote_id, duration))
                 self.active_emote_loops[user.id] = {"emote_id": emote_id, "task": task}
-                await self.highrise.send_whisper(user.id, f"🕺 Started loop for '{emote_name}'. Type '!stop' to halt.")
+                await self.highrise.send_whisper(user.id, f"🕺 Your avatar is now looping '{emote_name}'. Type '!stop' to halt.")
             else:
                 await self.highrise.send_whisper(user.id, "❌ Unknown dance name. Check spelling format!")
                 
         elif clean_msg == "!stop":
             await self.stop_emote(user.id)
-            await self.highrise.send_whisper(user.id, "🛑 Your current dance loop has been stopped.")
+            await self.highrise.send_whisper(user.id, "🛑 Your avatar's dance loop has been stopped.")
 
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
