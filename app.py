@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Persistent, Emote Loop & Clean Announcement Edition
+Highrise Room Management Bot - Player Emote Loop & Instant Announcement Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -238,17 +238,18 @@ class SecurityRoomBot(BaseBot):
                 print("[CRITICAL ALERT] Game connection frozen entirely. Hard cycling container...")
                 sys.exit(1)
 
-    # Clean public announcement pathway loop
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                await asyncio.sleep(300)  
+                # Send immediately on launch/re-entry, THEN sleep
                 await self.highrise.chat(
                     "✨ Type !help to see commands! Tip 500g for permanent VIP 👑 | "
                     "To loop an emote, type '!loop <name>' and type '!stop' to halt 🕺 | "
                     "Let's hang out and spread love! ❤️"
                 )
-            except Exception: pass
+                await asyncio.sleep(300)  
+            except Exception: 
+                await asyncio.sleep(10)
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
         self.last_highrise_activity = time.time()
@@ -281,15 +282,13 @@ class SecurityRoomBot(BaseBot):
             while True:
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
+                # TARGET FIXED: Triggers emote on the actual user_id, not the bot!
                 await self.highrise.send_emote(emote_id, user_id)
                 await asyncio.sleep(duration)
         except asyncio.CancelledError:
             pass
         except Exception as e:
             print(f"Error in loop_emote for user {user_id}: {e}")
-            try:
-                await self.highrise.send_whisper(user_id, f"Error performing emote: {e}")
-            except Exception: pass
         finally:
             if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
                 del self.active_emote_loops[user_id]
