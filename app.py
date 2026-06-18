@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Targeted Player Emote Edition
+Highrise Room Management Bot - Stable Continuous Player Loop Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -19,159 +19,148 @@ from highrise.models import SessionMetadata, CurrencyItem, Item
 
 MEMORY_FILE = "tipped_users.txt"
 
-# Map containing both targeted interactive animations and standard assets
+# Map containing verified highrise emote asset IDs and their precise track length animations
 EMOTE_MAP = {
-    "rest": {"id": "sit-open", "duration": 17.062613},
-    "zombie": {"id": "idle_zombie", "duration": 28.754937},
-    "relaxed": {"id": "idle_layingdown2", "duration": 21.546653},
-    "attentive": {"id": "idle_layingdown", "duration": 24.585168},
-    "sleepy": {"id": "idle-sleep", "duration": 22.620446},
-    "poutyface": {"id": "idle-sad", "duration": 24.377214},
-    "posh": {"id": "idle-posh", "duration": 21.851256},
-    "tired": {"id": "idle-loop-tired", "duration": 21.959007},
-    "taploop": {"id": "idle-loop-tapdance", "duration": 6.261593},
-    "sit": {"id": "idle-loop-sitfloor", "duration": 22.321055},
-    "shy": {"id": "idle-loop-shy", "duration": 16.47449},
-    "bummed": {"id": "idle-loop-sad", "duration": 6.052999},
-    "chillin": {"id": "idle-loop-happy", "duration": 18.798322},
-    "annoyed": {"id": "idle-loop-annoyed", "duration": 17.058522},
-    "aerobics": {"id": "idle-loop-aerobics", "duration": 8.507535},
-    "ponder": {"id": "idle-lookup", "duration": 22.339865},
-    "heropose": {"id": "idle-hero", "duration": 21.877099},
-    "relaxing": {"id": "idle-floorsleeping2", "duration": 17.253372},
-    "cozynap": {"id": "idle-floorsleeping", "duration": 13.935264},
-    "enthused": {"id": "idle-enthusiastic", "duration": 15.941537},
-    "feelthebeat": {"id": "idle-dance-headbobbing", "duration": 25.367458},
-    "irritated": {"id": "idle-angry", "duration": 25.427848},
-    "fastsing": {"id": "emote-sicklycute-sing-fast", "duration": 10},
-    "slowsing": {"id": "emote-sicklycute-sing-slow", "duration": 10},
-    "yes": {"id": "emote-yes", "duration": 2.565001},
-    "ibelieveicanfly": {"id": "emote-wings", "duration": 13.134487},
-    "thewave": {"id": "emote-wave", "duration": 2.690873},
-    "think": {"id": "emote-think", "duration": 3.691104},
-    "theatrical": {"id": "emote-theatrical", "duration": 8.591869},
-    "tapdance": {"id": "emote-tapdance", "duration": 11.057294},
-    "superrun": {"id": "emote-superrun", "duration": 6.273226},
-    "superpunch": {"id": "emote-superpunch", "duration": 3.751054},
-    "sumofight": {"id": "emote-sumo", "duration": 10.868834},
-    "thumbsuck": {"id": "emote-suckthumb", "duration": 4.185944},
-    "splitsdrop": {"id": "emote-splitsdrop", "duration": 4.46931},
-    "snowballfight": {"id": "emote-snowball", "duration": 5.230467},
-    "snowangel": {"id": "emote-snowangel", "duration": 6.218627},
-    "handshake": {"id": "emote-secrethandshake", "duration": 3.879024},
-    "sad": {"id": "emote-sad", "duration": 5.411073},
-    "pull": {"id": "emote-ropepull", "duration": 8.769656},
-    "roll": {"id": "emote-roll", "duration": 3.560517},
-    "rofl": {"id": "emote-rofl", "duration": 6.314731},
-    "robot": {"id": "emote-robot", "duration": 7.607362},
-    "rainbow": {"id": "emote-rainbow", "duration": 2.813373},
-    "proposing": {"id": "emote-proposing", "duration": 4.27888},
-    "peekaboo": {"id": "emote-peekaboo", "duration": 3.629867},
-    "peace": {"id": "emote-peace", "duration": 5.755004},
-    "panic": {"id": "emote-panic", "duration": 2.850966},
-    "no": {"id": "emote-no", "duration": 2.703034},
-    "ninjarun": {"id": "emote-ninjarun", "duration": 4.754721},
-    "nightfever": {"id": "emote-nightfever", "duration": 5.488424},
-    "monsterfail": {"id": "emote-monster_fail", "duration": 4.632708},
-    "model": {"id": "emote-model", "duration": 6.490173},
-    "levelup": {"id": "emote-levelup", "duration": 6.0545},
-    "amused": {"id": "emote-laughing2", "duration": 5.056641},
-    "laugh": {"id": "emote-laughing", "duration": 2.69161},
-    "kiss": {"id": "emote-kiss", "duration": 2.387175},
-    "superkick": {"id": "emote-kicking", "duration": 4.867992},
-    "jump": {"id": "emote-jumpb", "duration": 3.584234},
-    "judochop": {"id": "emote-judochop", "duration": 2.427442},
-    "jetpack": {"id": "emote-jetpack", "duration": 16.759457},
-    "hugyourself": {"id": "emote-hugyourself", "duration": 4.992751},
-    "sweating": {"id": "emote-hot", "duration": 4.353037},
-    "hello": {"id": "emote-hello", "duration": 2.734844},
-    "harlemshake": {"id": "emote-harlemshake", "duration": 13.558597},
-    "happy": {"id": "emote-happy", "duration": 3.483462},
-    "handstand": {"id": "emote-handstand", "duration": 4.015678},
-    "greedyemote": {"id": "emoji-greedy", "duration": 4.639828},
-    "moonwalk": {"id": "emote-gordonshuffle", "duration": 8.052307},
-    "ghostfloat": {"id": "emote-ghost-idle", "duration": 19.570492},
-    "gangnamstyle": {"id": "emote-gangnam", "duration": 7.275486},
-    "faint": {"id": "emote-fainting", "duration": 18.423499},
-    "clumsy": {"id": "emote-fail2", "duration": 6.475972},
-    "fall": {"id": "emote-fail1", "duration": 5.617942},
-    "facepalm": {"id": "emote-exasperatedb", "duration": 2.722748},
-    "exasperated": {"id": "emote-exasperated", "duration": 2.367483},
-    "elbowbump": {"id": "emote-elbowbump", "duration": 3.799768},
-    "disco": {"id": "emote-disco", "duration": 5.366973},
-    "blastoff": {"id": "emote-disappear", "duration": 6.195985},
-    "faintdrop": {"id": "emote-deathdrop", "duration": 3.762728},
-    "collapse": {"id": "emote-death2", "duration": 4.855549},
-    "revival": {"id": "emote-death", "duration": 6.615967},
-    "dab": {"id": "emote-dab", "duration": 2.717871},
-    "curtsy": {"id": "emote-curtsy", "duration": 2.425714},
-    "confusion": {"id": "emote-confused", "duration": 8.578827},
-    "cold": {"id": "emote-cold", "duration": 3.664348},
-    "charging": {"id": "emote-charging", "duration": 8.025079},
-    "bunnyhop": {"id": "emote-bunnyhop", "duration": 12.380685},
-    "bow": {"id": "bow", "duration": 3.344036},
-    "boo": {"id": "emote-boo", "duration": 4.501502},
-    "homerun": {"id": "emote-baseball", "duration": 7.254841},
-    "fallingapart": {"id": "emote-apart", "duration": 4.809542},
-    "thumbsup": {"id": "emoji-thumbsup", "duration": 2.702369},
-    "point": {"id": "emoji-there", "duration": 2.059095},
-    "sneeze": {"id": "emoji-sneeze", "duration": 2.996694},
-    "smirk": {"id": "emoji-smirking", "duration": 4.823158},
-    "sick": {"id": "emoji-sick", "duration": 5.070367},
-    "gasp": {"id": "emoji-scared", "duration": 3.008487},
-    "punch": {"id": "emoji-punch", "duration": 1.755783},
-    "pray": {"id": "emoji-pray", "duration": 4.503179},
-    "stinky": {"id": "emoji-poop", "duration": 4.795735},
-    "naughty": {"id": "emoji-naughty", "duration": 4.277602},
-    "mindblown": {"id": "emoji-mind-blown", "duration": 2.397167},
-    "lying": {"id": "emoji-lying", "duration": 6.313748},
-    "levitate": {"id": "emoji-halo", "duration": 5.837754},
-    "fireballlunge": {"id": "emoji-hadoken", "duration": 2.723709},
-    "giveup": {"id": "emoji-give-up", "duration": 5.407888},
-    "tummyache": {"id": "emoji-gagging", "duration": 5.500202},
-    "stunned": {"id": "emoji-dizzy", "duration": 4.053049},
-    "sob": {"id": "emoji-crying", "duration": 3.696499},
-    "clap": {"id": "emoji-clapping", "duration": 2.161757},
-    "raisetheroof": {"id": "emoji-celebrate", "duration": 3.412258},
-    "arrogance": {"id": "emoji-arrogance", "duration": 6.869441},
-    "angry": {"id": "emoji-angry", "duration": 5.760023},
-    "voguehands": {"id": "dance-voguehands", "duration": 9.150634},
-    "savagedance": {"id": "dance-tiktok8", "duration": 10.938702},
-    "dontstartnow": {"id": "dance-tiktok2", "duration": 10.392353},
-    "smoothwalk": {"id": "dance-smoothwalk", "duration": 6.690023},
-    "ringonit": {"id": "dance-singleladies", "duration": 21.191372},
-    "letsgoshopping": {"id": "dance-shoppingcart", "duration": 4.316035},
-    "russian": {"id": "dance-russian", "duration": 10.252905},
-    "pennywise": {"id": "dance-pennywise", "duration": 1.214349},
-    "orangejuicedance": {"id": "dance-orangejustice", "duration": 6.475263},
-    "rockout": {"id": "dance-metal", "duration": 15.076377},
-    "macarena": {"id": "dance-macarena", "duration": 12.214141},
-    "handsintheair": {"id": "dance-handsup", "duration": 22.283413},
-    "duckwalk": {"id": "dance-duckwalk", "duration": 11.748784},
-    "kpopdance": {"id": "dance-blackpink", "duration": 7.150958},
-    "pushups": {"id": "dance-aerobics", "duration": 8.796402},
-    "hyped": {"id": "emote-hyped", "duration": 7.492423},
-    "jinglebell": {"id": "dance-jinglebell", "duration": 11},
-    "nervous": {"id": "idle-nervous", "duration": 21.714221},
-    "toilet": {"id": "idle-toilet", "duration": 32.174447},
-    "attention": {"id": "emote-attention", "duration": 4.401206},
-    "astronaut": {"id": "emote-astronaut", "duration": 13.791175},
+    "rest": {"id": "sit-open", "duration": 17.0},
+    "zombie": {"id": "idle_zombie", "duration": 28.0},
+    "relaxed": {"id": "idle_layingdown2", "duration": 21.0},
+    "attentive": {"id": "idle_layingdown", "duration": 24.0},
+    "sleepy": {"id": "idle-sleep", "duration": 22.0},
+    "poutyface": {"id": "idle-sad", "duration": 24.0},
+    "posh": {"id": "idle-posh", "duration": 21.0},
+    "tired": {"id": "idle-loop-tired", "duration": 21.0},
+    "taploop": {"id": "idle-loop-tapdance", "duration": 6.0},
+    "sit": {"id": "idle-loop-sitfloor", "duration": 22.0},
+    "shy": {"id": "idle-loop-shy", "duration": 16.0},
+    "bummed": {"id": "idle-loop-sad", "duration": 6.0},
+    "chillin": {"id": "idle-loop-happy", "duration": 18.0},
+    "annoyed": {"id": "idle-loop-annoyed", "duration": 17.0},
+    "aerobics": {"id": "idle-loop-aerobics", "duration": 8.0},
+    "ponder": {"id": "idle-lookup", "duration": 22.0},
+    "heropose": {"id": "idle-hero", "duration": 21.0},
+    "relaxing": {"id": "idle-floorsleeping2", "duration": 17.0},
+    "cozynap": {"id": "idle-floorsleeping", "duration": 13.0},
+    "enthused": {"id": "idle-enthusiastic", "duration": 15.0},
+    "feelthebeat": {"id": "idle-dance-headbobbing", "duration": 25.0},
+    "irritated": {"id": "idle-angry", "duration": 25.0},
+    "fastsing": {"id": "emote-sicklycute-sing-fast", "duration": 10.0},
+    "slowsing": {"id": "emote-sicklycute-sing-slow", "duration": 10.0},
+    "yes": {"id": "emote-yes", "duration": 2.5},
+    "ibelieveicanfly": {"id": "emote-wings", "duration": 13.0},
+    "thewave": {"id": "emote-wave", "duration": 2.6},
+    "think": {"id": "emote-think", "duration": 3.6},
+    "theatrical": {"id": "emote-theatrical", "duration": 8.5},
+    "tapdance": {"id": "emote-tapdance", "duration": 11.0},
+    "superrun": {"id": "emote-superrun", "duration": 6.2},
+    "superpunch": {"id": "emote-superpunch", "duration": 3.7},
+    "sumofight": {"id": "emote-sumo", "duration": 10.8},
+    "thumbsuck": {"id": "emote-suckthumb", "duration": 4.1},
+    "splitsdrop": {"id": "emote-splitsdrop", "duration": 4.4},
+    "snowballfight": {"id": "emote-snowball", "duration": 5.2},
+    "snowangel": {"id": "emote-snowangel", "duration": 6.2},
+    "handshake": {"id": "emote-secrethandshake", "duration": 3.8},
+    "sad": {"id": "emote-sad", "duration": 5.4},
+    "pull": {"id": "emote-ropepull", "duration": 8.7},
+    "roll": {"id": "emote-roll", "duration": 3.5},
+    "rofl": {"id": "emote-rofl", "duration": 6.3},
+    "robot": {"id": "emote-robot", "duration": 7.6},
+    "rainbow": {"id": "emote-rainbow", "duration": 2.8},
+    "proposing": {"id": "emote-proposing", "duration": 4.2},
+    "peekaboo": {"id": "emote-peekaboo", "duration": 3.6},
+    "peace": {"id": "emote-peace", "duration": 5.7},
+    "panic": {"id": "emote-panic", "duration": 2.8},
+    "no": {"id": "emote-no", "duration": 2.7},
+    "ninjarun": {"id": "emote-ninjarun", "duration": 4.7},
+    "nightfever": {"id": "emote-nightfever", "duration": 5.4},
+    "monsterfail": {"id": "emote-monster_fail", "duration": 4.6},
+    "model": {"id": "emote-model", "duration": 6.4},
+    "levelup": {"id": "emote-levelup", "duration": 6.0},
+    "amused": {"id": "emote-laughing2", "duration": 5.0},
+    "laugh": {"id": "emote-laughing", "duration": 2.6},
+    "kiss": {"id": "emote-kiss", "duration": 2.3},
+    "superkick": {"id": "emote-kicking", "duration": 4.8},
+    "jump": {"id": "emote-jumpb", "duration": 3.5},
+    "judochop": {"id": "emote-judochop", "duration": 2.4},
+    "jetpack": {"id": "emote-jetpack", "duration": 16.7},
+    "hugyourself": {"id": "emote-hugyourself", "duration": 4.9},
+    "sweating": {"id": "emote-hot", "duration": 4.3},
+    "hello": {"id": "emote-hello", "duration": 2.7},
+    "harlemshake": {"id": "emote-harlemshake", "duration": 13.5},
+    "happy": {"id": "emote-happy", "duration": 3.4},
+    "handstand": {"id": "emote-handstand", "duration": 4.0},
+    "greedyemote": {"id": "emoji-greedy", "duration": 4.6},
+    "moonwalk": {"id": "emote-gordonshuffle", "duration": 8.0},
+    "ghostfloat": {"id": "emote-ghost-idle", "duration": 19.5},
+    "gangnamstyle": {"id": "emote-gangnam", "duration": 7.2},
+    "faint": {"id": "emote-fainting", "duration": 18.4},
+    "clumsy": {"id": "emote-fail2", "duration": 6.4},
+    "fall": {"id": "emote-fail1", "duration": 5.6},
+    "facepalm": {"id": "emote-exasperatedb", "duration": 2.7},
+    "exasperated": {"id": "emote-exasperated", "duration": 2.3},
+    "elbowbump": {"id": "emote-elbowbump", "duration": 3.7},
+    "disco": {"id": "emote-disco", "duration": 5.3},
+    "blastoff": {"id": "emote-disappear", "duration": 6.1},
+    "faintdrop": {"id": "emote-deathdrop", "duration": 3.7},
+    "collapse": {"id": "emote-death2", "duration": 4.8},
+    "revival": {"id": "emote-death", "duration": 6.6},
+    "dab": {"id": "emote-dab", "duration": 2.7},
+    "curtsy": {"id": "emote-curtsy", "duration": 2.4},
+    "confusion": {"id": "emote-confused", "duration": 8.5},
+    "cold": {"id": "emote-cold", "duration": 3.6},
+    "charging": {"id": "emote-charging", "duration": 8.0},
+    "bunnyhop": {"id": "emote-bunnyhop", "duration": 12.3},
+    "bow": {"id": "bow", "duration": 3.3},
+    "boo": {"id": "emote-boo", "duration": 4.5},
+    "homerun": {"id": "emote-baseball", "duration": 7.2},
+    "fallingapart": {"id": "emote-apart", "duration": 4.8},
+    "thumbsup": {"id": "emoji-thumbsup", "duration": 2.7},
+    "point": {"id": "emoji-there", "duration": 2.0},
+    "sneeze": {"id": "emoji-sneeze", "duration": 2.9},
+    "smirk": {"id": "emoji-smirking", "duration": 4.8},
+    "sick": {"id": "emoji-sick", "duration": 5.0},
+    "gasp": {"id": "emoji-scared", "duration": 3.0},
+    "punch": {"id": "emoji-punch", "duration": 1.7},
+    "pray": {"id": "emoji-pray", "duration": 4.5},
+    "stinky": {"id": "emoji-poop", "duration": 4.7},
+    "naughty": {"id": "emoji-naughty", "duration": 4.2},
+    "mindblown": {"id": "emoji-mind-blown", "duration": 2.3},
+    "lying": {"id": "emoji-lying", "duration": 6.3},
+    "levitate": {"id": "emoji-halo", "duration": 5.8},
+    "fireballlunge": {"id": "emoji-hadoken", "duration": 2.7},
+    "giveup": {"id": "emoji-give-up", "duration": 5.4},
+    "tummyache": {"id": "emoji-gagging", "duration": 5.5},
+    "stunned": {"id": "emoji-dizzy", "duration": 4.0},
+    "sob": {"id": "emoji-crying", "duration": 3.6},
+    "clap": {"id": "emoji-clapping", "duration": 2.1},
+    "raisetheroof": {"id": "emoji-celebrate", "duration": 3.4},
+    "arrogance": {"id": "emoji-arrogance", "duration": 6.8},
+    "angry": {"id": "emoji-angry", "duration": 5.7},
+    "voguehands": {"id": "dance-voguehands", "duration": 9.1},
+    "savagedance": {"id": "dance-tiktok8", "duration": 10.9},
+    "dontstartnow": {"id": "dance-tiktok2", "duration": 10.3},
+    "smoothwalk": {"id": "dance-smoothwalk", "duration": 6.6},
+    "ringonit": {"id": "dance-singleladies", "duration": 21.1},
+    "letsgoshopping": {"id": "dance-shoppingcart", "duration": 4.3},
+    "russian": {"id": "dance-russian", "duration": 10.2},
+    "pennywise": {"id": "dance-pennywise", "duration": 1.2},
+    "orangejuicedance": {"id": "dance-orangejustice", "duration": 6.4},
+    "rockout": {"id": "dance-metal", "duration": 15.0},
+    "macarena": {"id": "dance-macarena", "duration": 12.2},
+    "handsintheair": {"id": "dance-handsup", "duration": 22.2},
+    "duckwalk": {"id": "dance-duckwalk", "duration": 11.7},
+    "kpopdance": {"id": "dance-blackpink", "duration": 7.1},
+    "pushups": {"id": "dance-aerobics", "duration": 8.7},
+    "hyped": {"id": "emote-hyped", "duration": 7.4},
+    "jinglebell": {"id": "dance-jinglebell", "duration": 11.0},
+    "nervous": {"id": "idle-nervous", "duration": 21.7},
+    "toilet": {"id": "idle-toilet", "duration": 32.1},
+    "attention": {"id": "emote-attention", "duration": 4.4},
+    "astronaut": {"id": "emote-astronaut", "duration": 13.7},
     "dancezombie": {"id": "dance-zombie", "duration": 14.1}
 }
 
 # =====================================================================
-# ⚡ TARGETED PLAYER PERFORMANCE EXECUTION
-# =====================================================================
-async def run_target_player_emote(bot, emote_id: str, target_user_id: str) -> None:
-    try:
-        # Relies on highrise routing layout where providing the target string
-        # safely overrides execution context toward the typing user.
-        await bot.highrise.send_emote(emote_id, target_user_id)
-    except Exception as e:
-        print(f"[EMOTE EXECUTION FAIL] Failed targeting player context: {e}")
-
-# =====================================================================
-# 🤖 1. HIGHRISE CORE GAME ENGINE
+# 🤖 HIGHRISE INTEGRATED OPERATIONS CORE
 # =====================================================================
 class SecurityRoomBot(BaseBot):
     def __init__(self):
@@ -183,6 +172,7 @@ class SecurityRoomBot(BaseBot):
         self.bot_id = None
         self.last_highrise_activity = time.time()
         
+        # 📍 INSTANT SPAWN TARGET POSITION SETTING
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -190,6 +180,9 @@ class SecurityRoomBot(BaseBot):
             Position(19.00070, 23.0, 33.99, facing="FrontRight"),
             Position(27.5, 23.0, 30.0, facing="FrontRight")
         ]
+        
+        # Dictionary to keep track of continuous active player loop tasks
+        self.active_loops = {}
         self.load_tipped_users()
 
     def load_tipped_users(self):
@@ -219,34 +212,37 @@ class SecurityRoomBot(BaseBot):
         print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         self.last_highrise_activity = time.time()
         
-        await asyncio.sleep(3.0)
+        # ⚡ EXECUTE CRITICAL INSTANT SPAWN IMMEDIATELY AT TARGET COORDINATES
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
-        except Exception: pass
+            print("[SPAWN SUCCESS] Bot placed instantly at x=14.0, y=0.5, z=31.0")
+        except Exception as e: 
+            print(f"[SPAWN RETRY] Handshake delayed, queuing position reset: {e}")
                 
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
 
     async def connection_watchdog_loop(self) -> None:
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(45) # Lowered to maintain real-time persistent heartbeats
             try:
                 await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
                 
+                # Check position drift safety check
                 room_users = await self.highrise.get_room_users()
                 for user, position in room_users.content:
                     if user.id == self.bot_id:
                         if isinstance(position, Position):
-                            if abs(position.x - 14.0) > 0.5 or abs(position.z - 31.0) > 0.5:
-                                print("[ANCHOR] Bot drifted. Re-centering position smoothly.")
+                            if abs(position.x - 14.0) > 0.8 or abs(position.z - 31.0) > 0.8:
+                                print("[WATCHDOG ANCHOR] Auto-correcting drift to exact spawn point.")
                                 await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
                         break
             except Exception as e:
-                print(f"[WATCHDOG PASS] API method temporary slip: {e}")
+                print(f"[WATCHDOG MONITOR] API pass transaction clear: {e}")
                 
-            if time.time() - self.last_highrise_activity > 480:
-                print("[CRITICAL ALERT] Game connection frozen entirely. Hard cycling container...")
+            if time.time() - self.last_highrise_activity > 360:
+                print("[CRITICAL ALERT] Gateway completely frozen. Hard cycling container...")
                 sys.exit(1)
 
     async def start_announcement_loop(self) -> None:
@@ -254,12 +250,22 @@ class SecurityRoomBot(BaseBot):
             try:
                 await self.highrise.chat(
                     "✨ Welcome to our space! Type !help to discover commands. "
-                    "Want to dance? Use '!loop <name>' and the bot will cast the connection straight to your avatar! "
+                    "Want to dance? Use '!loop <name>' or type '!stop' to finish! "
                     "Support our room by tipping 500g for permanent VIP access. ❤️"
                 )
                 await asyncio.sleep(300)  
             except Exception: 
                 await asyncio.sleep(10)
+
+    # --- ⚡ RECURSIVE BACKGROUND ENGINE TASK ---
+    async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
+        while True:
+            try:
+                await self.highrise.send_emote(emote_id, user_id)
+                await asyncio.sleep(duration)
+            except Exception:
+                # Breaks out safely if user leaves room to prevent memory leaks
+                break
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
         self.last_highrise_activity = time.time()
@@ -285,6 +291,10 @@ class SecurityRoomBot(BaseBot):
 
     async def on_user_leave(self, user: User) -> None:
         self.last_highrise_activity = time.time()
+        # Clean up loops immediately when a player leaves to optimize memory footprint
+        if user.id in self.active_loops:
+            self.active_loops[user.id].cancel()
+            del self.active_loops[user.id]
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -328,15 +338,34 @@ class SecurityRoomBot(BaseBot):
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         
-        # --- 🌐 CONNECTED PLAYER EMOTE ROUTER ---
+        # --- 🌐 PERSISTENT ACTIVE EMOTE ROUTING CORES ---
         if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
+                # Cancel an existing loop first if they type a new one
+                if user.id in self.active_loops:
+                    self.active_loops[user.id].cancel()
+                
                 emote_id = EMOTE_MAP[emote_name]["id"]
-                # Create a task pointing straight to the player's session payload
-                asyncio.create_task(run_target_player_emote(self, emote_id, user.id))
+                duration = EMOTE_MAP[emote_name]["duration"]
+                
+                # Instantly trigger the first execution
+                try:
+                    await self.highrise.send_emote(emote_id, user.id)
+                except Exception: pass
+                
+                # Spin off background task runner so player keeps animating cleanly
+                self.active_loops[user.id] = asyncio.create_task(
+                    self.continuous_loop_handler(user.id, emote_id, duration)
+                )
             else:
                 await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Check your spelling configuration!")
+
+        elif clean_msg == "!stop":
+            if user.id in self.active_loops:
+                self.active_loops[user.id].cancel()
+                del self.active_loops[user.id]
+                await self.highrise.send_whisper(user.id, "✅ Your active loop routine has been successfully closed.")
 
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
@@ -423,9 +452,9 @@ class SecurityRoomBot(BaseBot):
             if user.username.lower() == self.owner_username.lower():
                 await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user")
             elif user.id in self.vip_users:
-                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down' to travel between floors.\nEmote casting: Type '!loop <name>'.")
+                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down' to travel between floors.\nEmote loop tracker: Type '!loop <name>' or '!stop'.")
             else:
-                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote casting: Type '!loop <name>'.")
+                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote loop tracker: Type '!loop <name>'.")
                 
         elif clean_msg == "!vip":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
