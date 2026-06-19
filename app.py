@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Stable Continuous Player Loop & Fixed Watchdog Edition
+Highrise Room Management Bot - Pure Explicit Emote Parameter Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -226,13 +226,8 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(45) 
             try:
-                # Safe validation checking the API result object structure smoothly
+                # Safe attribute verification loop to handle transient API issues elegantly
                 wallet_response = await self.highrise.get_wallet()
-                if wallet_response and not hasattr(wallet_response, "content") and hasattr(wallet_response, "value"):
-                    # Handling raw error fallback structures or type-checking variants safely
-                    pass
-                
-                # Update watchdog timestamp smoothly to keep container fresh
                 self.last_highrise_activity = time.time()
                 
                 # Check position drift safety check
@@ -245,9 +240,8 @@ class SecurityRoomBot(BaseBot):
                                     print("[WATCHDOG ANCHOR] Auto-correcting drift to exact spawn point.")
                                     await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
                             break
-            except Exception as e:
-                # Safely logging API responses without breaking or crashing script loop routines
-                print(f"[WATCHDOG MONITOR] API pipeline tick updated safely.")
+            except Exception:
+                pass
                 
             if time.time() - self.last_highrise_activity > 480:
                 print("[INFO] No active player events recorded, but API channels remain monitored.")
@@ -269,11 +263,8 @@ class SecurityRoomBot(BaseBot):
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
-                # Send explicit user target protocol loops to prevent the bot performing it
-                try:
-                    await self.highrise.send_emote_to_user(user_id, emote_id)
-                except AttributeError:
-                    await self.highrise.send_emote(emote_id, user_id)
+                # Applied double-argument specification directly into background runner
+                await self.highrise.send_emote(emote_id, user_id)
                 await asyncio.sleep(duration)
             except Exception:
                 break
@@ -362,12 +353,9 @@ class SecurityRoomBot(BaseBot):
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
+                # Exact requested structure alignment execution matrix
                 try:
-                    # Combined target execution matrix: Try explicit user routing first, fallback cleanly
-                    try:
-                        await self.highrise.send_emote_to_user(user.id, emote_id)
-                    except AttributeError:
-                        await self.highrise.send_emote(emote_id, user.id)
+                    await self.highrise.send_emote(emote_id, user.id)
                 except Exception as e:
                     print(f"[EMOTE ERROR] Failed to emote @{user.username}: {e}")
                 
@@ -375,7 +363,10 @@ class SecurityRoomBot(BaseBot):
                     self.continuous_loop_handler(user.id, emote_id, duration)
                 )
             else:
-                await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Check your spelling configuration!")
+                await self.highrise.send_whisper(
+                    user.id, 
+                    "❌ Unknown emote name. Please check the emote spelling."
+                )
 
         elif clean_msg == "!stop":
             if user.id in self.active_loops:
