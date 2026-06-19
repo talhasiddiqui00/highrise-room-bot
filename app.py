@@ -265,9 +265,10 @@ class SecurityRoomBot(BaseBot):
             try:
                 # Applied double-argument specification directly into background runner
                 await self.highrise.send_emote(emote_id, user_id)
-                await asyncio.sleep(duration)
-            except Exception:
+            except Exception as e:
+                print(f"[LOOP ERROR] user_id={user_id} emote={emote_id}: {type(e).__name__}: {e}")
                 break
+            await asyncio.sleep(duration)
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
         self.last_highrise_activity = time.time()
@@ -356,8 +357,9 @@ class SecurityRoomBot(BaseBot):
                 # Exact requested structure alignment execution matrix
                 try:
                     await self.highrise.send_emote(emote_id, user.id)
+                    print(f"[EMOTE DEBUG] Sent '{emote_id}' targeting user_id={user.id} ({user.username})")
                 except Exception as e:
-                    print(f"[EMOTE ERROR] Failed to emote @{user.username}: {e}")
+                    print(f"[EMOTE ERROR] Failed to emote @{user.username} ({user.id}): {type(e).__name__}: {e}")
                 
                 self.active_loops[user.id] = asyncio.create_task(
                     self.continuous_loop_handler(user.id, emote_id, duration)
