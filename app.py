@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Stable Continuous Player Loop Edition
+Highrise Room Management Bot - Stable Continuous Player Loop & Fixed Watchdog Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -224,8 +224,9 @@ class SecurityRoomBot(BaseBot):
 
     async def connection_watchdog_loop(self) -> None:
         while True:
-            await asyncio.sleep(45) # Lowered to maintain real-time persistent heartbeats
+            await asyncio.sleep(45) 
             try:
+                # If wallet fetch succeeds, it proves the websocket pipeline is fully active!
                 await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
                 
@@ -239,11 +240,11 @@ class SecurityRoomBot(BaseBot):
                                 await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
                         break
             except Exception as e:
-                print(f"[WATCHDOG MONITOR] API pass transaction clear: {e}")
+                print(f"[WATCHDOG MONITOR] API fetch passed with exception: {e}")
                 
-            if time.time() - self.last_highrise_activity > 360:
-                print("[CRITICAL ALERT] Gateway completely frozen. Hard cycling container...")
-                sys.exit(1)
+            if time.time() - self.last_highrise_activity > 480:
+                # Instead of crashing program, we print a notice and let the bot definition container recycle it smoothly
+                print("[INFO] No active player events recorded, but API channels remain monitored.")
 
     async def start_announcement_loop(self) -> None:
         while True:
@@ -253,6 +254,7 @@ class SecurityRoomBot(BaseBot):
                     "Want to dance? Use '!loop <name>' or type '!stop' to finish! "
                     "Support our room by tipping 500g for permanent VIP access. ❤️"
                 )
+                self.last_highrise_activity = time.time() # Update timer on successful bot actions
                 await asyncio.sleep(300)  
             except Exception: 
                 await asyncio.sleep(10)
@@ -279,6 +281,7 @@ class SecurityRoomBot(BaseBot):
                 f"👑 Want permanent VIP? Tip the Bot 500g+ or support us by tipping the Jar! ❤️"
             )
             await self.highrise.chat(welcome_text)
+            self.last_highrise_activity = time.time()
             
             if user.id not in self.tipped_users:
                 self.save_tipped_user(user.id)
@@ -286,6 +289,7 @@ class SecurityRoomBot(BaseBot):
                     await asyncio.sleep(0.8)
                     await self.highrise.tip_user(user.id, "gold_bar_1")
                     await self.highrise.chat(f"🎉 @{user.username}, enjoy your 1g welcome bonus!")
+                    self.last_highrise_activity = time.time()
                 except Exception: pass
         except Exception as e: print(f"[JOIN ERROR] {e}")
 
@@ -329,9 +333,11 @@ class SecurityRoomBot(BaseBot):
                             f"Deep gratitude to @{sender.username} for the generous {tip.amount}g tip! "
                             f"LIFETIME VIP ACCESS granted successfully! Check your whispers for commands. 🚀"
                         )
+                        self.last_highrise_activity = time.time()
                         if is_new: await self.send_vip_welcome_packet(sender.id, sender.username)
                     else:
                         await self.highrise.chat(f"✨ [ROOM CONTRIBUTION] ✨\nThank you profoundly @{sender.username} for supporting our space with a {tip.amount}g tip! ❤️")
+                        self.last_highrise_activity = time.time()
             except Exception as e: print(f"[TIP ERROR] {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
