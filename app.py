@@ -226,24 +226,25 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(45) 
             try:
-                # If wallet fetch succeeds, it proves the websocket pipeline is fully active!
-                await self.highrise.get_wallet()
-                self.last_highrise_activity = time.time()
+                # Safe validation layer checking the API result object safely
+                wallet_response = await self.highrise.get_wallet()
+                if hasattr(wallet_response, "content"):
+                    self.last_highrise_activity = time.time()
                 
                 # Check position drift safety check
                 room_users = await self.highrise.get_room_users()
-                for user, position in room_users.content:
-                    if user.id == self.bot_id:
-                        if isinstance(position, Position):
-                            if abs(position.x - 14.0) > 0.8 or abs(position.z - 31.0) > 0.8:
-                                print("[WATCHDOG ANCHOR] Auto-correcting drift to exact spawn point.")
-                                await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
-                        break
+                if hasattr(room_users, "content"):
+                    for user, position in room_users.content:
+                        if user.id == self.bot_id:
+                            if isinstance(position, Position):
+                                if abs(position.x - 14.0) > 0.8 or abs(position.z - 31.0) > 0.8:
+                                    print("[WATCHDOG ANCHOR] Auto-correcting drift to exact spawn point.")
+                                    await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
+                            break
             except Exception as e:
                 print(f"[WATCHDOG MONITOR] API fetch passed with exception: {e}")
                 
             if time.time() - self.last_highrise_activity > 480:
-                # Instead of crashing program, we print a notice and let the bot definition container recycle it smoothly
                 print("[INFO] No active player events recorded, but API channels remain monitored.")
 
     async def start_announcement_loop(self) -> None:
@@ -254,7 +255,7 @@ class SecurityRoomBot(BaseBot):
                     "Want to dance? Use '!loop <name>' or type '!stop' to finish! "
                     "Support our room by tipping 500g for permanent VIP access. ❤️"
                 )
-                self.last_highrise_activity = time.time() # Update timer on successful bot actions
+                self.last_highrise_activity = time.time() 
                 await asyncio.sleep(300)  
             except Exception: 
                 await asyncio.sleep(10)
@@ -263,10 +264,10 @@ class SecurityRoomBot(BaseBot):
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
-                await self.highrise.send_emote(emote_id, user_id)
+                # FIX: Explicit player targeting method
+                await self.highrise.send_emote_to_user(user_id, emote_id)
                 await asyncio.sleep(duration)
             except Exception:
-                # Breaks out safely if user leaves room to prevent memory leaks
                 break
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
@@ -295,7 +296,6 @@ class SecurityRoomBot(BaseBot):
 
     async def on_user_leave(self, user: User) -> None:
         self.last_highrise_activity = time.time()
-        # Clean up loops immediately when a player leaves to optimize memory footprint
         if user.id in self.active_loops:
             self.active_loops[user.id].cancel()
             del self.active_loops[user.id]
@@ -338,7 +338,7 @@ class SecurityRoomBot(BaseBot):
                     else:
                         await self.highrise.chat(f"✨ [ROOM CONTRIBUTION] ✨\nThank you profoundly @{sender.username} for supporting our space with a {tip.amount}g tip! ❤️")
                         self.last_highrise_activity = time.time()
-            except Exception as e: print(f"[TIP ERROR] {e}")
+            except Exception as e: print(f"[VIP TIP ERROR] {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
         self.last_highrise_activity = time.time()
@@ -348,19 +348,17 @@ class SecurityRoomBot(BaseBot):
         if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
-                # Cancel an existing loop first if they type a new one
                 if user.id in self.active_loops:
                     self.active_loops[user.id].cancel()
                 
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
-                # Instantly trigger the first execution
+                # FIX: Explicit player targeting method
                 try:
-                    await self.highrise.send_emote(emote_id, user.id)
+                    await self.highrise.send_emote_to_user(user.id, emote_id)
                 except Exception: pass
                 
-                # Spin off background task runner so player keeps animating cleanly
                 self.active_loops[user.id] = asyncio.create_task(
                     self.continuous_loop_handler(user.id, emote_id, duration)
                 )
@@ -379,8 +377,9 @@ class SecurityRoomBot(BaseBot):
             if clean_msg == "!bal":
                 try:
                     wallet_response = await self.highrise.get_wallet()
-                    bot_gold = next((item.amount for item in wallet_response.content if item.type == "gold"), 0)
-                    await self.highrise.send_whisper(user.id, f"💰 [VAULT BALANCE] {bot_gold} gold remains securely in reserve.")
+                    if hasattr(wallet_response, "content"):
+                        bot_gold = next((item.amount for item in wallet_response.content if item.type == "gold"), 0)
+                        await self.highrise.send_whisper(user.id, f"💰 [VAULT BALANCE] {bot_gold} gold remains securely in reserve.")
                 except Exception as e: print(f"[BALANCE FAIL] {e}")
                     
             elif clean_msg.startswith("!with"):
@@ -401,10 +400,11 @@ class SecurityRoomBot(BaseBot):
                         amount_str = parts[2].lower().replace("g", "")
                         if amount_str in ["1", "5", "10", "50", "100", "500", "1k", "5000", "10k"]:
                             room_users = await self.highrise.get_room_users()
-                            user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
-                            if user_id_found:
-                                await self.highrise.send_whisper(user.id, f"🎁 [GIFT SENT] Transferred {amount_str}g straight to @{target_user}!")
-                                await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
+                            if hasattr(room_users, "content"):
+                                user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                                if user_id_found:
+                                    await self.highrise.send_whisper(user.id, f"🎁 [GIFT SENT] Transferred {amount_str}g straight to @{target_user}!")
+                                    await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
                 except Exception as e: print(f"[GIFT FAIL] {e}")
 
             elif clean_msg.startswith("!giveall "):
@@ -414,17 +414,18 @@ class SecurityRoomBot(BaseBot):
                         amount_str = parts[1].replace("g", "")
                         if amount_str in ["1", "5", "10"]:
                             room_users = await self.highrise.get_room_users()
-                            target_count = 0
-                            for u, pos in room_users.content:
-                                if u.id != self.bot_id and u.username.lower() != self.owner_username.lower():
-                                    target_count += 1
-                                    asyncio.create_task(self.highrise.tip_user(u.id, f"gold_bar_{amount_str}"))
-                                    await asyncio.sleep(0.2)
-                            
-                            if target_count > 0:
-                                await self.highrise.chat(f"🎁 [RAIN DROP] @{self.owner_username} tipped {amount_str}g to all {target_count} players in the room! 🎉")
-                            else:
-                                await self.highrise.send_whisper(user.id, "❌ No other eligible players found in the room to tip.")
+                            if hasattr(room_users, "content"):
+                                target_count = 0
+                                for u, pos in room_users.content:
+                                    if u.id != self.bot_id and u.username.lower() != self.owner_username.lower():
+                                        target_count += 1
+                                        asyncio.create_task(self.highrise.tip_user(u.id, f"gold_bar_{amount_str}"))
+                                        await asyncio.sleep(0.2)
+                                
+                                if target_count > 0:
+                                    await self.highrise.chat(f"🎁 [RAIN DROP] @{self.owner_username} tipped {amount_str}g to all {target_count} players in the room! 🎉")
+                                else:
+                                    await self.highrise.send_whisper(user.id, "❌ No other eligible players found in the room to tip.")
                 except Exception as e: print(f"[GIVEALL FAIL] {e}")
 
             elif clean_msg.startswith("!givevip "):
@@ -433,12 +434,13 @@ class SecurityRoomBot(BaseBot):
                     if len(parts) >= 2:
                         target_user = parts[1].replace("@", "").strip()
                         room_users = await self.highrise.get_room_users()
-                        user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
-                        if user_id_found:
-                            if user_id_found not in self.vip_users:
-                                self.vip_users.append(user_id_found)
-                                await self.highrise.chat(f"👑 VIP Status manually granted to @{target_user} by the Room Owner! ✨")
-                                await self.send_vip_welcome_packet(user_id_found, target_user)
+                        if hasattr(room_users, "content"):
+                            user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                            if user_id_found:
+                                if user_id_found not in self.vip_users:
+                                    self.vip_users.append(user_id_found)
+                                    await self.highrise.chat(f"👑 VIP Status manually granted to @{target_user} by the Room Owner! ✨")
+                                    await self.send_vip_welcome_packet(user_id_found, target_user)
                 except Exception as e: print(f"[GIVEVIP FAIL] {e}")
 
             elif clean_msg.startswith("!removevip "):
@@ -447,10 +449,11 @@ class SecurityRoomBot(BaseBot):
                     if len(parts) >= 2:
                         target_user = parts[1].replace("@", "").strip()
                         room_users = await self.highrise.get_room_users()
-                        user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
-                        if user_id_found and user_id_found in self.vip_users:
-                            self.vip_users.remove(user_id_found)
-                            await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
+                        if hasattr(room_users, "content"):
+                            user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                            if user_id_found and user_id_found in self.vip_users:
+                                self.vip_users.remove(user_id_found)
+                                await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
                 except Exception as e: print(f"[REMOVEVIP FAIL] {e}")
 
         # --- 💡 GENERAL PUBLIC COMMAND UTILITIES ---
