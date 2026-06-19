@@ -17,6 +17,12 @@ import threading
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
+# Force unbuffered stdout so logs actually appear on Render (and similar
+# hosts) immediately instead of sitting in a buffer that may never flush
+# for a long-running asyncio process.
+sys.stdout.reconfigure(line_buffering=True)
+os.environ["PYTHONUNBUFFERED"] = "1"
+
 MEMORY_FILE = "tipped_users.txt"
 
 # Map containing verified highrise emote asset IDs and their precise track length animations
@@ -266,7 +272,7 @@ class SecurityRoomBot(BaseBot):
                 # Applied double-argument specification directly into background runner
                 await self.highrise.send_emote(emote_id, user_id)
             except Exception as e:
-                print(f"[LOOP ERROR] user_id={user_id} emote={emote_id}: {type(e).__name__}: {e}")
+                print(f"[LOOP ERROR] user_id={user_id} emote={emote_id}: {type(e).__name__}: {e}", flush=True)
                 break
             await asyncio.sleep(duration)
 
@@ -343,6 +349,7 @@ class SecurityRoomBot(BaseBot):
     async def on_chat(self, user: User, message: str) -> None:
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
+        print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
         
         # --- 🌐 PERSISTENT ACTIVE EMOTE ROUTING CORES ---
         if clean_msg.startswith("!loop "):
@@ -357,9 +364,9 @@ class SecurityRoomBot(BaseBot):
                 # Exact requested structure alignment execution matrix
                 try:
                     await self.highrise.send_emote(emote_id, user.id)
-                    print(f"[EMOTE DEBUG] Sent '{emote_id}' targeting user_id={user.id} ({user.username})")
+                    print(f"[EMOTE DEBUG] Sent '{emote_id}' targeting user_id={user.id} ({user.username})", flush=True)
                 except Exception as e:
-                    print(f"[EMOTE ERROR] Failed to emote @{user.username} ({user.id}): {type(e).__name__}: {e}")
+                    print(f"[EMOTE ERROR] Failed to emote @{user.username} ({user.id}): {type(e).__name__}: {e}", flush=True)
                 
                 self.active_loops[user.id] = asyncio.create_task(
                     self.continuous_loop_handler(user.id, emote_id, duration)
