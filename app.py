@@ -3,7 +3,7 @@ Highrise Room Management Bot - Production Engine
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
-Fix: Session collision isolation layer
+Fixes: Session collision isolation layer + Adaptive Loyalty Milestone Tipping Engine
 """
 
 import os
@@ -182,6 +182,10 @@ class SecurityRoomBot(BaseBot):
         ]
         
         self.active_loops = {}
+        
+        # --- ⏱️ LOYALTY TIME TRACKER DATA STRUCTURES ---
+        self.room_activity_tracker = {} 
+        
         self.load_tipped_users()
 
     def load_tipped_users(self):
@@ -217,6 +221,9 @@ class SecurityRoomBot(BaseBot):
                 
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
+        
+        # Launch background tracking loop
+        asyncio.create_task(self.loyalty_milestone_worker())
 
     async def connection_watchdog_loop(self) -> None:
         while True:
@@ -238,12 +245,75 @@ class SecurityRoomBot(BaseBot):
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                announcement = "✨ Welcome to our space! Type !help to discover commands. Support the space by tipping the bot! ❤️"
+                announcement = "✨ Welcome to our space! Type !help to discover commands. Stay active in the room to earn free gold milestones! ❤️"
                 await self.highrise.chat(announcement)
                 self.last_highrise_activity = time.time() 
                 await asyncio.sleep(300)  
             except Exception: 
                 await asyncio.sleep(10)
+
+    # --- ⏱️ LOYALTY TRACKER CLOCK WORKER ---
+    async def loyalty_milestone_worker(self) -> None:
+        while True:
+            await asyncio.sleep(60) # Scan room once every minute
+            try:
+                room_users = await self.highrise.get_room_users()
+                if not room_users or not hasattr(room_users, "content"):
+                    continue
+
+                current_active_ids = []
+                now = time.time()
+
+                for user, position in room_users.content:
+                    if user.id == self.bot_id or "bot" in user.username.lower():
+                        continue
+                    
+                    current_active_ids.append(user.id)
+
+                    # Initialize user tracker if they aren't recorded yet
+                    if user.id not in self.room_activity_tracker:
+                        self.room_activity_tracker[user.id] = {
+                            "join_time": now,
+                            "username": user.username,
+                            "milestones_hit": set()
+                        }
+
+                    user_data = self.room_activity_tracker[user.id]
+                    elapsed_minutes = int((now - user_data["join_time"]) / 60)
+
+                    target_milestone = None
+
+                    # Check milestones sequentially: 15m, 40m, 90m, and every +30m after that
+                    if elapsed_minutes >= 15 and 15 not in user_data["milestones_hit"]:
+                        target_milestone = 15
+                    elif elapsed_minutes >= 40 and 40 not in user_data["milestones_hit"]:
+                        target_milestone = 40
+                    elif elapsed_minutes >= 90 and 90 not in user_data["milestones_hit"]:
+                        target_milestone = 90
+                    elif elapsed_minutes > 90:
+                        # Logic for every 30 minutes after 90 (120, 150, 180, etc.)
+                        extra_time = elapsed_minutes - 90
+                        if extra_time % 30 == 0 and elapsed_minutes not in user_data["milestones_hit"]:
+                            target_milestone = elapsed_minutes
+
+                    # If they hit a milestone, reward them!
+                    if target_milestone:
+                        user_data["milestones_hit"].add(target_milestone)
+                        try:
+                            await self.highrise.tip_user(user.id, "gold_bar_1")
+                            await self.highrise.chat(f"🎉 Congrats @{user.username}! You've been active for {elapsed_minutes} mins and earned a 1g loyalty bonus! 👑")
+                            self.last_highrise_activity = time.time()
+                            await asyncio.sleep(0.5)
+                        except Exception as e:
+                            print(f"[LOYALTY TIP ERR] Failed to reward user {user.username}: {e}")
+
+                # Clean up tracker memory for users who left the room
+                for tracked_id in list(self.room_activity_tracker.keys()):
+                    if tracked_id not in current_active_ids:
+                        del self.room_activity_tracker[tracked_id]
+
+            except Exception as worker_err:
+                print(f"[LOYALTY WORKER CRASH FIX] Safe catching: {worker_err}")
 
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
@@ -258,6 +328,14 @@ class SecurityRoomBot(BaseBot):
         self.last_highrise_activity = time.time()
         if user.id == self.bot_id or "bot" in user.username.lower(): return
         if user.username.lower() == self.owner_username.lower(): self.owner_id = user.id
+
+        # Seed tracker immediately upon entry hook
+        if user.id not in self.room_activity_tracker:
+            self.room_activity_tracker[user.id] = {
+                "join_time": time.time(),
+                "username": user.username,
+                "milestones_hit": set()
+            }
 
         try:
             welcome_text = (
@@ -283,13 +361,17 @@ class SecurityRoomBot(BaseBot):
         if user.id in self.active_loops:
             self.active_loops[user.id].cancel()
             del self.active_loops[user.id]
+        
+        # Flush loyalty tracking data clean on exit
+        if user.id in self.room_activity_tracker:
+            del self.room_activity_tracker[user.id]
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
             await asyncio.sleep(1.0) 
             await self.highrise.send_whisper(user_id, f"👑 Welcome to Lifetime VIP, @{username}! Here are your exclusive commands:")
             await self.highrise.send_whisper(user_id, "🚀 Type: '!vip' to teleport up to the luxury lounge level.")
-            await self.highrise.send_whisper(user_id, "⬇️ Type: '!down' to return immediately back to the main ground floor.")
+            await self.highrise.send_whisper(user_id, "⬇ interrupt: '!down' to return immediately back to the main ground floor.")
         except Exception: pass
 
     async def on_whisper(self, user: User, message: str) -> None:
@@ -494,7 +576,6 @@ async def start_bot_engine():
             await main(definitions=definitions)
         except Exception as engine_err:
             err_msg = str(engine_err).lower()
-            # FIX: If the server catches a duplicate login session error, apply back-off delay to clear out the ghost bot
             if "duplicate" in err_msg or "already connected" in err_msg or "login" in err_msg:
                 print("[RECOVERY PIPELINE] Session collision detected. Backing off 45s for server clearance...")
                 await asyncio.sleep(45)
