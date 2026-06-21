@@ -17,15 +17,13 @@ import threading
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
-# Force unbuffered stdout so logs actually appear on Render (and similar
-# hosts) immediately instead of sitting in a buffer that may never flush
-# for a long-running asyncio process.
+# Force unbuffered stdout so logs actually appear on Render immediately
 sys.stdout.reconfigure(line_buffering=True)
 os.environ["PYTHONUNBUFFERED"] = "1"
 
 MEMORY_FILE = "tipped_users.txt"
 
-# Map containing verified highrise emote asset IDs and their precise track length animations
+# Map containing verified highrise emote asset IDs
 EMOTE_MAP = {
     "rest": {"id": "sit-open", "duration": 17.0},
     "zombie": {"id": "idle_zombie", "duration": 28.0},
@@ -178,7 +176,10 @@ class SecurityRoomBot(BaseBot):
         self.bot_id = None
         self.last_highrise_activity = time.time()
         
-        # 📍 INSTANT SPAWN TARGET POSITION SETTING
+        # 🎵 SONG FEATURE INJECTIONS
+        self.pending_song_requests = set()  # Keeps track of user_ids allowed to choose a song
+        self.current_playing_song = "None"
+        
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -187,7 +188,6 @@ class SecurityRoomBot(BaseBot):
             Position(27.5, 23.0, 30.0, facing="FrontRight")
         ]
         
-        # Dictionary to keep track of continuous active player loop tasks
         self.active_loops = {}
         self.load_tipped_users()
 
@@ -218,7 +218,6 @@ class SecurityRoomBot(BaseBot):
         print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         self.last_highrise_activity = time.time()
         
-        # ⚡ EXECUTE CRITICAL INSTANT SPAWN IMMEDIATELY AT TARGET COORDINATES
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             print("[SPAWN SUCCESS] Bot placed instantly at x=14.0, y=0.5, z=31.0")
@@ -232,11 +231,9 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(45) 
             try:
-                # Safe attribute verification loop to handle transient API issues elegantly
                 wallet_response = await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
                 
-                # Check position drift safety check
                 room_users = await self.highrise.get_room_users()
                 if room_users and hasattr(room_users, "content"):
                     for user, position in room_users.content:
@@ -255,21 +252,20 @@ class SecurityRoomBot(BaseBot):
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                await self.highrise.chat(
-                    "✨ Welcome to our space! Type !help to discover commands. "
-                    "Want to dance? Use '!loop <name>' or type '!stop' to finish! "
-                    "Support our room by tipping 500g for permanent VIP access. ❤️"
+                announcement = (
+                    f"✨ Welcome to our space! Type !help to discover commands. \n"
+                    f"🎵 Tip exactly 20g to pick the next track! \n"
+                    f"📻 Currently playing: {self.current_playing_song}"
                 )
+                await self.highrise.chat(announcement)
                 self.last_highrise_activity = time.time() 
                 await asyncio.sleep(300)  
             except Exception: 
                 await asyncio.sleep(10)
 
-    # --- ⚡ RECURSIVE BACKGROUND ENGINE TASK ---
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
-                # Applied double-argument specification directly into background runner
                 await self.highrise.send_emote(emote_id, user_id)
             except Exception as e:
                 print(f"[LOOP ERROR] user_id={user_id} emote={emote_id}: {type(e).__name__}: {e}", flush=True)
@@ -284,8 +280,8 @@ class SecurityRoomBot(BaseBot):
         try:
             welcome_text = (
                 f"👋 Welcome to the room @{user.username}! 🎉\n"
-                f"💡 Type '!help' to view Guest Commands.\n"
-                f"👑 Want permanent VIP? Tip the Bot 500g+ or support us by tipping the Jar! ❤️"
+                f"🎵 Tip 20g to play your favorite song request!\n"
+                f"👑 Want permanent VIP? Tip the Bot 500g+! ❤️"
             )
             await self.highrise.chat(welcome_text)
             self.last_highrise_activity = time.time()
@@ -305,6 +301,8 @@ class SecurityRoomBot(BaseBot):
         if user.id in self.active_loops:
             self.active_loops[user.id].cancel()
             del self.active_loops[user.id]
+        if user.id in self.pending_song_requests:
+            self.pending_song_requests.remove(user.id)
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -331,7 +329,16 @@ class SecurityRoomBot(BaseBot):
                 is_to_owner = (receiver.id == self.owner_id or receiver.username.lower() == self.owner_username.lower())
 
                 if is_to_bot or is_to_owner:
-                    if tip.amount >= 500:
+                    # 🎵 CHECK FOR EXACTLY 20 GOLD SONG TIERS
+                    if tip.amount == 20:
+                        self.pending_song_requests.add(sender.id)
+                        await self.highrise.chat(f"🥳 Thank you @{sender.username} for the 20g tip!")
+                        await self.highrise.send_whisper(
+                            sender.id, 
+                            "🎵 Song Request Unlocked! Type '!song <name of song>' in the public chat now to change the music!"
+                        )
+                    
+                    elif tip.amount >= 500:
                         is_new = sender.id not in self.vip_users
                         if is_new: self.vip_users.append(sender.id)
                         await self.highrise.chat(
@@ -344,15 +351,40 @@ class SecurityRoomBot(BaseBot):
                     else:
                         await self.highrise.chat(f"✨ [ROOM CONTRIBUTION] ✨\nThank you profoundly @{sender.username} for supporting our space with a {tip.amount}g tip! ❤️")
                         self.last_highrise_activity = time.time()
-            except Exception as e: print(f"[VIP TIP ERROR] {e}")
+            except Exception as e: print(f"[TIP ROUTING FAIL] {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
         
+        # --- 🎵 SONG SELECTION PROCESSING CORE ---
+        if clean_msg.startswith("!song "):
+            if user.id in self.pending_song_requests:
+                requested_song = message[6:].strip() # Extract original capitalization of the track name
+                if requested_song:
+                    self.current_playing_song = requested_song
+                    self.pending_song_requests.remove(user.id) # Reset their credit balance
+                    
+                    # Grand Public Announcement Matrix
+                    announcement = (
+                        f"📢 🎶 [NOW PLAYING] 🎶 📢\n"
+                        f"✨ DJ @{user.username} has changed the music! ✨\n"
+                        f"🔥 Track: '{requested_song}' is now playing in the club! Turn up! 💃🕺"
+                    )
+                    await self.highrise.chat(announcement)
+                    
+                    # Force a track change dancing emote response onto the bot
+                    try:
+                        await self.highrise.send_emote("dance-tiktok8", self.bot_id)
+                    except Exception: pass
+                else:
+                    await self.highrise.send_whisper(user.id, "❌ Please type a valid name. (Example: !song Starboy)")
+            else:
+                await self.highrise.send_whisper(user.id, "❌ You haven't tipped 20g for a song allocation yet! Support the room to play a track.")
+
         # --- 🌐 PERSISTENT ACTIVE EMOTE ROUTING CORES ---
-        if clean_msg.startswith("!loop "):
+        elif clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
                 if user.id in self.active_loops:
@@ -361,21 +393,16 @@ class SecurityRoomBot(BaseBot):
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
-                # Exact requested structure alignment execution matrix
                 try:
                     await self.highrise.send_emote(emote_id, user.id)
-                    print(f"[EMOTE DEBUG] Sent '{emote_id}' targeting user_id={user.id} ({user.username})", flush=True)
                 except Exception as e:
-                    print(f"[EMOTE ERROR] Failed to emote @{user.username} ({user.id}): {type(e).__name__}: {e}", flush=True)
+                    print(f"[EMOTE ERROR] Failed to emote @{user.username}: {e}", flush=True)
                 
                 self.active_loops[user.id] = asyncio.create_task(
                     self.continuous_loop_handler(user.id, emote_id, duration)
                 )
             else:
-                await self.highrise.send_whisper(
-                    user.id, 
-                    "❌ Unknown emote name. Please check the emote spelling."
-                )
+                await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Please check the emote spelling.")
 
         elif clean_msg == "!stop":
             if user.id in self.active_loops:
@@ -385,7 +412,6 @@ class SecurityRoomBot(BaseBot):
 
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
-            
             if clean_msg == "!bal":
                 try:
                     wallet_response = await self.highrise.get_wallet()
