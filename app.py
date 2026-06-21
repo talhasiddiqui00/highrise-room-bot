@@ -1,7 +1,7 @@
 """
-Highrise Room Management Bot - Target Emote Fix Layout
+Highrise Room Management Bot - Pure 25.1.0 Latest Production Engine
 Target Room ID: 6a28b5b000b6151bd4c9641e
-SDK Version Compatibility: 23.2.0+
+SDK Version: 25.1.0
 Developer: sadi_key
 """
 
@@ -17,6 +17,7 @@ import threading
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
+# Force unbuffered stdout so logs actually appear on Render immediately
 sys.stdout.reconfigure(line_buffering=True)
 os.environ["PYTHONUNBUFFERED"] = "1"
 
@@ -161,9 +162,6 @@ EMOTE_MAP = {
     "dancezombie": {"id": "dance-zombie", "duration": 14.1}
 }
 
-# =====================================================================
-# 🤖 HIGHRISE INTEGRATED OPERATIONS CORE
-# =====================================================================
 class SecurityRoomBot(BaseBot):
     def __init__(self):
         super().__init__()
@@ -209,7 +207,7 @@ class SecurityRoomBot(BaseBot):
             self.owner_id = session_metadata.room_info.owner_id
         except AttributeError: pass
 
-        print(f"\n[BOT ACTIVE] Target fix protocol engaged on legacy SDK pipeline.")
+        print(f"\n[BOT ACTIVE] Production Engine initialized successfully on SDK 25.1.0.")
         self.last_highrise_activity = time.time()
         
         try:
@@ -249,9 +247,9 @@ class SecurityRoomBot(BaseBot):
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
-                # FIX: Explicitly tracking user target context to prevent bot from stealing the action
+                # 25.1.0 TARGET SYNTAX - Bypasses server ownership drift bugs
                 await self.highrise.send_emote(emote_id=emote_id, user_id=user_id)
-            except Exception as e:
+            except Exception:
                 print(f"[LOOP TERMINATED] User left or action broke: {user_id}", flush=True)
                 break
             await asyncio.sleep(duration)
@@ -341,7 +339,6 @@ class SecurityRoomBot(BaseBot):
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
-                # FIX: Named arguments explicitly passed to enforce player focus directly from the trigger
                 try:
                     await self.highrise.send_emote(emote_id=emote_id, user_id=user.id)
                 except Exception as e:
