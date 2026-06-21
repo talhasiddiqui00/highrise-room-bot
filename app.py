@@ -176,8 +176,7 @@ class SecurityRoomBot(BaseBot):
         self.bot_id = None
         self.last_highrise_activity = time.time()
         
-        # 🎵 SONG FEATURE INJECTIONS
-        self.pending_song_requests = set()  # Keeps track of user_ids allowed to choose a song
+        # 🎵 SONG CACHE STORAGE
         self.current_playing_song = "None"
         
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
@@ -254,7 +253,7 @@ class SecurityRoomBot(BaseBot):
             try:
                 announcement = (
                     f"✨ Welcome to our space! Type !help to discover commands. \n"
-                    f"🎵 Tip exactly 20g to pick the next track! \n"
+                    f"🎵 Type '!song <name>' to change the room music vibe! \n"
                     f"📻 Currently playing: {self.current_playing_song}"
                 )
                 await self.highrise.chat(announcement)
@@ -280,7 +279,7 @@ class SecurityRoomBot(BaseBot):
         try:
             welcome_text = (
                 f"👋 Welcome to the room @{user.username}! 🎉\n"
-                f"🎵 Tip 20g to play your favorite song request!\n"
+                f"🎵 Type '!song <track>' to suggest a song selection!\n"
                 f"👑 Want permanent VIP? Tip the Bot 500g+! ❤️"
             )
             await self.highrise.chat(welcome_text)
@@ -301,8 +300,6 @@ class SecurityRoomBot(BaseBot):
         if user.id in self.active_loops:
             self.active_loops[user.id].cancel()
             del self.active_loops[user.id]
-        if user.id in self.pending_song_requests:
-            self.pending_song_requests.remove(user.id)
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -329,16 +326,7 @@ class SecurityRoomBot(BaseBot):
                 is_to_owner = (receiver.id == self.owner_id or receiver.username.lower() == self.owner_username.lower())
 
                 if is_to_bot or is_to_owner:
-                    # 🎵 CHECK FOR EXACTLY 20 GOLD SONG TIERS
-                    if tip.amount == 20:
-                        self.pending_song_requests.add(sender.id)
-                        await self.highrise.chat(f"🥳 Thank you @{sender.username} for the 20g tip!")
-                        await self.highrise.send_whisper(
-                            sender.id, 
-                            "🎵 Song Request Unlocked! Type '!song <name of song>' in the public chat now to change the music!"
-                        )
-                    
-                    elif tip.amount >= 500:
+                    if tip.amount >= 500:
                         is_new = sender.id not in self.vip_users
                         if is_new: self.vip_users.append(sender.id)
                         await self.highrise.chat(
@@ -358,30 +346,26 @@ class SecurityRoomBot(BaseBot):
         clean_msg = message.lower().strip()
         print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
         
-        # --- 🎵 SONG SELECTION PROCESSING CORE ---
+        # --- 🎵 SIMPLIFIED OPEN SONG SELECTION PROCESSOR ---
         if clean_msg.startswith("!song "):
-            if user.id in self.pending_song_requests:
-                requested_song = message[6:].strip() # Extract original capitalization of the track name
-                if requested_song:
-                    self.current_playing_song = requested_song
-                    self.pending_song_requests.remove(user.id) # Reset their credit balance
-                    
-                    # Grand Public Announcement Matrix
-                    announcement = (
-                        f"📢 🎶 [NOW PLAYING] 🎶 📢\n"
-                        f"✨ DJ @{user.username} has changed the music! ✨\n"
-                        f"🔥 Track: '{requested_song}' is now playing in the club! Turn up! 💃🕺"
-                    )
-                    await self.highrise.chat(announcement)
-                    
-                    # Force a track change dancing emote response onto the bot
-                    try:
-                        await self.highrise.send_emote("dance-tiktok8", self.bot_id)
-                    except Exception: pass
-                else:
-                    await self.highrise.send_whisper(user.id, "❌ Please type a valid name. (Example: !song Starboy)")
+            requested_song = message[6:].strip() # Extract track details directly
+            if requested_song:
+                self.current_playing_song = requested_song
+                
+                # Grand Public Announcement Matrix
+                announcement = (
+                    f"📢 🎶 [NOW PLAYING] 🎶 📢\n"
+                    f"✨ DJ @{user.username} has changed the music! ✨\n"
+                    f"🔥 Track: '{requested_song}' is now playing in the club! Turn up! 💃🕺"
+                )
+                await self.highrise.chat(announcement)
+                
+                # Bot dancing reaction
+                try:
+                    await self.highrise.send_emote("dance-tiktok8", self.bot_id)
+                except Exception: pass
             else:
-                await self.highrise.send_whisper(user.id, "❌ You haven't tipped 20g for a song allocation yet! Support the room to play a track.")
+                await self.highrise.send_whisper(user.id, "❌ Please type a valid track name. (Example: !song Starboy)")
 
         # --- 🌐 PERSISTENT ACTIVE EMOTE ROUTING CORES ---
         elif clean_msg.startswith("!loop "):
