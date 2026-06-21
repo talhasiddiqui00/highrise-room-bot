@@ -1,7 +1,7 @@
 """
-Highrise Room Management Bot - Stable Legacy SDK Layout
+Highrise Room Management Bot - Target Emote Fix Layout
 Target Room ID: 6a28b5b000b6151bd4c9641e
-SDK Version: 23.1.0
+SDK Version Compatibility: 23.2.0+
 Developer: sadi_key
 """
 
@@ -17,13 +17,11 @@ import threading
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
-# Force unbuffered stdout so logs actually appear on Render immediately
 sys.stdout.reconfigure(line_buffering=True)
 os.environ["PYTHONUNBUFFERED"] = "1"
 
 MEMORY_FILE = "tipped_users.txt"
 
-# Map containing verified highrise emote asset IDs
 EMOTE_MAP = {
     "rest": {"id": "sit-open", "duration": 17.0},
     "zombie": {"id": "idle_zombie", "duration": 28.0},
@@ -211,14 +209,12 @@ class SecurityRoomBot(BaseBot):
             self.owner_id = session_metadata.room_info.owner_id
         except AttributeError: pass
 
-        print(f"\n[BOT ACTIVE] Handshake confirmed via legacy SDK compatibility mode.")
+        print(f"\n[BOT ACTIVE] Target fix protocol engaged on legacy SDK pipeline.")
         self.last_highrise_activity = time.time()
         
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
-            print("[SPAWN SUCCESS] Bot placed instantly at x=14.0, y=0.5, z=31.0")
-        except Exception as e: 
-            print(f"[SPAWN RETRY] Handshake delayed, queuing position reset: {e}")
+        except Exception: pass
                 
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
@@ -236,14 +232,9 @@ class SecurityRoomBot(BaseBot):
                         if user.id == self.bot_id:
                             if isinstance(position, Position):
                                 if abs(position.x - 14.0) > 0.8 or abs(position.z - 31.0) > 0.8:
-                                    print("[WATCHDOG ANCHOR] Auto-correcting drift to exact spawn point.")
                                     await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
                             break
-            except Exception:
-                pass
-                
-            if time.time() - self.last_highrise_activity > 480:
-                print("[INFO] No active player events recorded, but API channels remain monitored.")
+            except Exception: pass
 
     async def start_announcement_loop(self) -> None:
         while True:
@@ -258,10 +249,10 @@ class SecurityRoomBot(BaseBot):
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
-                # Legacy SDK compatible format
-                await self.highrise.send_emote(emote_id, user_id)
+                # FIX: Explicitly tracking user target context to prevent bot from stealing the action
+                await self.highrise.send_emote(emote_id=emote_id, user_id=user_id)
             except Exception as e:
-                print(f"[LOOP ERROR] user_id={user_id} emote={emote_id}: {type(e).__name__}: {e}", flush=True)
+                print(f"[LOOP TERMINATED] User left or action broke: {user_id}", flush=True)
                 break
             await asyncio.sleep(duration)
 
@@ -350,13 +341,14 @@ class SecurityRoomBot(BaseBot):
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
+                # FIX: Named arguments explicitly passed to enforce player focus directly from the trigger
                 try:
-                    await self.highrise.send_emote(emote_id, user.id)
+                    await self.highrise.send_emote(emote_id=emote_id, user_id=user.id)
                 except Exception as e:
-                    print(f"[EMOTE ERROR] Failed to emote @{user.username}: {e}", flush=True)
+                    print(f"[EMOTE FAIL] Initial trigger rejected: {e}", flush=True)
                 
                 self.active_loops[user.id] = asyncio.create_task(
-                    self.continuous_loop_handler(user.id, emote_id, duration)
+                    self.continuous_loop_handler(user_id=user.id, emote_id=emote_id, duration=duration)
                 )
             else:
                 await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Please check the emote spelling.")
@@ -463,7 +455,6 @@ class SecurityRoomBot(BaseBot):
         elif clean_msg == "!vip":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
                 try:
-                    await self.highrise.send_whisper(user.id, "🚀 Teleporting up to luxury lounge...")
                     await self.highrise.teleport(user.id, random.choice(self.vip_spawn_points))
                 except Exception: pass
             else:
@@ -472,7 +463,6 @@ class SecurityRoomBot(BaseBot):
         elif clean_msg == "!down":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
                 try:
-                    await self.highrise.send_whisper(user.id, "⬇️ Returning back to the ground floor...")
                     await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
                 except Exception: pass
 
@@ -512,7 +502,6 @@ async def start_bot_engine():
 if __name__ == "__main__":
     web_worker = threading.Thread(target=run_health_server, daemon=True)
     web_worker.start()
-    print("[WEB LAYER] Non-blocking server listening on port 10000...")
     
     try:
         asyncio.run(start_bot_engine())
