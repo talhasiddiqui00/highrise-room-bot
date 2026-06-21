@@ -3,7 +3,7 @@ Highrise Room Management Bot - Production Engine
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
-Features: Session isolation, Loyalty Milestones, Premium Jukebox Tip Queue (30g)
+Features: Session isolation, Loyalty Milestones, Premium Jukebox Tip Queue (30g) + Manual !song override
 """
 
 import os
@@ -185,8 +185,8 @@ class SecurityRoomBot(BaseBot):
         self.room_activity_tracker = {} 
         
         # --- 🎵 JUKEBOX QUEUE MEMORY CORE ---
-        self.music_queue = []          # List of dicts: {"song": str, "user": str}
-        self.current_track = None      # Stores active song details
+        self.music_queue = []          
+        self.current_track = None      
         
         self.load_tipped_users()
 
@@ -224,8 +224,6 @@ class SecurityRoomBot(BaseBot):
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
         asyncio.create_task(self.loyalty_milestone_worker())
-        
-        # Launch Virtual DJ Playback Thread
         asyncio.create_task(self.jukebox_playback_worker())
 
     async def connection_watchdog_loop(self) -> None:
@@ -309,11 +307,9 @@ class SecurityRoomBot(BaseBot):
                         del self.room_activity_tracker[tracked_id]
             except Exception: pass
 
-    # --- 🎵 JUKEBOX PLAYBACK WORKER LOOP ---
     async def jukebox_playback_worker(self) -> None:
         while True:
             if self.music_queue:
-                # Pull next track from queue
                 self.current_track = self.music_queue.pop(0)
                 track_name = self.current_track["song"]
                 requester = self.current_track["user"]
@@ -323,12 +319,10 @@ class SecurityRoomBot(BaseBot):
                     self.last_highrise_activity = time.time()
                 except Exception: pass
                 
-                # Each song simulates playback for 140 seconds (roughly 2.5 minutes)
                 song_duration = 140
                 elapsed = 0
                 while elapsed < song_duration:
                     try:
-                        # Make the bot groove along occasionally while playing tracks
                         if elapsed % 20 == 0:
                             await self.highrise.send_emote(emote_id="dance-handsup", target_user_id=self.bot_id)
                     except Exception: pass
@@ -341,7 +335,7 @@ class SecurityRoomBot(BaseBot):
                         await self.highrise.chat("🎵 Jukebox is currently empty. Tip 30g with a song name to keep the music going! 👇")
                 except Exception: pass
             else:
-                await asyncio.sleep(5) # Jukebox idle check delay
+                await asyncio.sleep(5) 
 
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
@@ -417,9 +411,7 @@ class SecurityRoomBot(BaseBot):
                 is_to_owner = (receiver.id == self.owner_id or receiver.username.lower() == self.owner_username.lower())
 
                 if is_to_bot or is_to_owner:
-                    # PREMIUM JUKEBOX TIMED QUEUE INTERCEPT CORE (30g - 499g)
                     if 30 <= tip.amount < 500:
-                        # Extract clean track text string safely
                         song_name = tip.comment.strip() if (hasattr(tip, "comment") and tip.comment) else ""
                         
                         if song_name:
@@ -430,15 +422,13 @@ class SecurityRoomBot(BaseBot):
                             self.last_highrise_activity = time.time()
                             await asyncio.sleep(0.5)
                             
-                            # Inform user precisely where they sit in rotation hierarchy
                             if queue_position == 1 and not self.current_track:
-                                await self.highrise.send_whisper(sender.id, f"✅ Your song '{song_name}' is next up and playing immediately!")
+                                await self.highrise.send_whisper(sender.id, f"✅ Your song '{song_name}' is up next and playing immediately!")
                             else:
                                 await self.highrise.send_whisper(sender.id, f"⏳ Queue status verified: Your song is currently number {queue_position} in line.")
                         else:
                             await self.highrise.send_whisper(sender.id, "⚠️ Tip recorded, but no song name was typed into the tip note! Write the song title next time.")
 
-                    # LIFETIME VIP LEVEL PROMOTION ROUTING (500g+)
                     elif tip.amount >= 500:
                         is_new = sender.id not in self.vip_users
                         if is_new: self.vip_users.append(sender.id)
@@ -454,13 +444,35 @@ class SecurityRoomBot(BaseBot):
                         self.last_highrise_activity = time.time()
             except Exception as e: print(f"[TIP ROUTING FAIL] {e}")
 
+    # --- 🛠️ COMPREHENSIVE TEXT INTERCEPT CHAT ENGINE ---
     async def on_chat(self, user: User, message: str) -> None:
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
 
+        # --- 🎵 DIRECT TEXT-BASED !SONG ROUTING ENGINE ---
+        if clean_msg.startswith("!song "):
+            try:
+                song_name = message[6:].strip()
+                if not song_name:
+                    await self.highrise.send_whisper(user.id, "⚠️ Please specify a song name. Example: !song Blinding Lights")
+                    return
+
+                self.music_queue.append({"song": song_name, "user": user.username})
+                queue_position = len(self.music_queue)
+
+                await self.highrise.chat(f"🎫 Jukebox Request Added! @{user.username} added '{song_name}' to the queue.")
+                
+                if queue_position == 1 and not self.current_track:
+                    await self.highrise.send_whisper(user.id, f"✅ Your song '{song_name}' is up next!")
+                else:
+                    await self.highrise.send_whisper(user.id, f"⏳ Position: #{queue_position} in line.")
+            except Exception as e:
+                print(f"[ERROR IN !SONG] {e}")
+            return 
+
         # --- PUBLIC Jukebox Status Command ---
-        if clean_msg == "!queue" or clean_msg == "!songs":
+        if clean_msg in ["!queue", "!songs"]:
             try:
                 if not self.music_queue and not self.current_track:
                     await self.highrise.send_whisper(user.id, "🎵 The Jukebox queue is currently completely clear.")
@@ -471,7 +483,9 @@ class SecurityRoomBot(BaseBot):
                     if self.music_queue:
                         status_text += f"📋 Upcoming tracks waiting: {len(self.music_queue)}"
                     await self.highrise.send_whisper(user.id, status_text)
-            except Exception: pass
+            except Exception as e:
+                print(f"[ERROR IN !QUEUE] {e}")
+            return
 
         # --- 🌐 PERSISTENT ACTIVE EMOTE ROUTING CORES ---
         if clean_msg.startswith("!loop "):
@@ -493,12 +507,14 @@ class SecurityRoomBot(BaseBot):
                 )
             else:
                 await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Please check the emote spelling.")
+            return
 
         elif clean_msg == "!stop":
             if user.id in self.active_loops:
                 self.active_loops[user.id].cancel()
                 del self.active_loops[user.id]
                 await self.highrise.send_whisper(user.id, "✅ Your active loop routine has been successfully closed.")
+            return
 
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
@@ -511,7 +527,6 @@ class SecurityRoomBot(BaseBot):
                 except Exception as e: print(f"[BALANCE FAIL] {e}")
 
             elif clean_msg == "!skip":
-                # Emergency skip control override for room owner
                 self.music_queue.clear()
                 await self.highrise.chat("🎵 Jukebox queue cleared manually by the Room Owner.")
                     
@@ -524,6 +539,93 @@ class SecurityRoomBot(BaseBot):
                             await self.highrise.send_whisper(user.id, f"💸 [WITHDRAWAL] Executing {raw_amount}g bar transfer...")
                             await self.highrise.tip_user(user.id, f"gold_bar_{raw_amount}")
                 except Exception as e: print(f"[WITHDRAWAL FAIL] {e}")
+
+            elif clean_msg.startswith("!give "):
+                try:
+                    parts = message.split()  
+                    if len(parts) >= 3:
+                        target_user = parts[1].replace("@", "").strip()
+                        amount_str = parts[2].lower().replace("g", "")
+                        if amount_str in ["1", "5", "10", "50", "100", "500", "1k", "5000", "10k"]:
+                            room_users = await self.highrise.get_room_users()
+                            if room_users and hasattr(room_users, "content"):
+                                user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                                if user_id_found:
+                                    await self.highrise.send_whisper(user.id, f"🎁 [GIFT SENT] Transferred {amount_str}g straight to @{target_user}!")
+                                    await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
+                except Exception as e: print(f"[GIFT FAIL] {e}")
+
+            elif clean_msg.startswith("!giveall "):
+                try:
+                    parts = clean_msg.split()
+                    if len(parts) >= 2:
+                        amount_str = parts[1].replace("g", "")
+                        if amount_str in ["1", "5", "10"]:
+                            room_users = await self.highrise.get_room_users()
+                            if room_users and hasattr(room_users, "content"):
+                                target_count = 0
+                                for u, pos in room_users.content:
+                                    if u.id != self.bot_id and u.username.lower() != self.owner_username.lower():
+                                        target_count += 1
+                                        asyncio.create_task(self.highrise.tip_user(u.id, f"gold_bar_{amount_str}"))
+                                        await asyncio.sleep(0.2)
+                                
+                                if target_count > 0:
+                                    await self.highrise.chat(f"🎁 [RAIN DROP] @{self.owner_username} tipped {amount_str}g to all {target_count} players in the room! 🎉")
+                                else:
+                                    await self.highrise.send_whisper(user.id, "❌ No other eligible players found in the room to tip.")
+                except Exception as e: print(f"[GIVEALL FAIL] {e}")
+
+            elif clean_msg.startswith("!givevip "):
+                try:
+                    parts = message.split()
+                    if len(parts) >= 2:
+                        target_user = parts[1].replace("@", "").strip()
+                        room_users = await self.highrise.get_room_users()
+                        if room_users and hasattr(room_users, "content"):
+                            user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                            if user_id_found:
+                                if user_id_found not in self.vip_users:
+                                    self.vip_users.append(user_id_found)
+                                    await self.highrise.chat(f"👑 VIP Status manually granted to @{target_user} by the Room Owner! ✨")
+                                    await self.send_vip_welcome_packet(user_id_found, target_user)
+                except Exception as e: print(f"[GIVEVIP FAIL] {e}")
+
+            elif clean_msg.startswith("!removevip "):
+                try:
+                    parts = message.split()
+                    if len(parts) >= 2:
+                        target_user = parts[1].replace("@", "").strip()
+                        room_users = await self.highrise.get_room_users()
+                        if room_users and hasattr(room_users, "content"):
+                            user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                            if user_id_found and user_id_found in self.vip_users:
+                                self.vip_users.remove(user_id_found)
+                                await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
+                except Exception as e: print(f"[REMOVEVIP FAIL] {e}")
+
+        # --- 💡 GENERAL PUBLIC COMMAND UTILITIES ---
+        if clean_msg == "!help":
+            if user.username.lower() == self.owner_username.lower():
+                await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user | !song <name>")
+            elif user.id in self.vip_users:
+                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down' to travel between floors.\nEmote loop tracker: Type '!loop <name>' or '!stop'.")
+            else:
+                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote loop tracker: Type '!loop <name>'.\nJukebox Status: Type '!queue'.")
+                
+        elif clean_msg == "!vip":
+            if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
+                try:
+                    await self.highrise.teleport(user.id, random.choice(self.vip_spawn_points))
+                except Exception: pass
+            else:
+                await self.highrise.send_whisper(user.id, "❌ Access Denied. Tip 500g or more to unlock.")
+
+        elif clean_msg == "!down":
+            if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
+                try:
+                    await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
+                except Exception: pass
 
 # =====================================================================
 # 🚀 2. LIGHTWEIGHT WEB LAYER WITH AUTO-RECOVERY PIPELINE
