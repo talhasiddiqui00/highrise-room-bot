@@ -1,8 +1,9 @@
 """
-Highrise Room Management Bot - Pure 25.1.0 Latest Production Engine
+Highrise Room Management Bot - Production Engine
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
+Fix: Session collision isolation layer
 """
 
 import os
@@ -247,8 +248,7 @@ class SecurityRoomBot(BaseBot):
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
-                # 25.1.0 TARGET SYNTAX - Bypasses server ownership drift bugs
-                await self.highrise.send_emote(emote_id=emote_id, user_id=user_id)
+                await self.highrise.send_emote(emote_id=emote_id, target_user_id=user_id)
             except Exception:
                 print(f"[LOOP TERMINATED] User left or action broke: {user_id}", flush=True)
                 break
@@ -340,7 +340,7 @@ class SecurityRoomBot(BaseBot):
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
                 try:
-                    await self.highrise.send_emote(emote_id=emote_id, user_id=user.id)
+                    await self.highrise.send_emote(emote_id=emote_id, target_user_id=user.id)
                 except Exception as e:
                     print(f"[EMOTE FAIL] Initial trigger rejected: {e}", flush=True)
                 
@@ -493,8 +493,14 @@ async def start_bot_engine():
             print("[MAIN ENGINE] Launching integrated Highrise Client...")
             await main(definitions=definitions)
         except Exception as engine_err:
-            print(f"[RECOVERY PIPELINE] Session dropped ({engine_err}). Retrying connection loop in 60s...")
-            await asyncio.sleep(60)
+            err_msg = str(engine_err).lower()
+            # FIX: If the server catches a duplicate login session error, apply back-off delay to clear out the ghost bot
+            if "duplicate" in err_msg or "already connected" in err_msg or "login" in err_msg:
+                print("[RECOVERY PIPELINE] Session collision detected. Backing off 45s for server clearance...")
+                await asyncio.sleep(45)
+            else:
+                print(f"[RECOVERY PIPELINE] Session dropped ({engine_err}). Retrying connection loop in 15s...")
+                await asyncio.sleep(15)
 
 if __name__ == "__main__":
     web_worker = threading.Thread(target=run_health_server, daemon=True)
