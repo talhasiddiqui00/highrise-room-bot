@@ -1,7 +1,7 @@
 """
-Highrise Room Management Bot - Pure Explicit Emote Parameter Edition
+Highrise Room Management Bot - Stable Legacy SDK Layout
 Target Room ID: 6a28b5b000b6151bd4c9641e
-SDK Version: 25.1.0
+SDK Version: 23.1.0
 Developer: sadi_key
 """
 
@@ -176,9 +176,6 @@ class SecurityRoomBot(BaseBot):
         self.bot_id = None
         self.last_highrise_activity = time.time()
         
-        # 🎵 SONG CACHE STORAGE
-        self.current_playing_song = "None"
-        
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -214,7 +211,7 @@ class SecurityRoomBot(BaseBot):
             self.owner_id = session_metadata.room_info.owner_id
         except AttributeError: pass
 
-        print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
+        print(f"\n[BOT ACTIVE] Handshake confirmed via legacy SDK compatibility mode.")
         self.last_highrise_activity = time.time()
         
         try:
@@ -251,11 +248,7 @@ class SecurityRoomBot(BaseBot):
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                announcement = (
-                    f"✨ Welcome to our space! Type !help to discover commands. \n"
-                    f"🎵 Type '!song <name>' to change the room music vibe! \n"
-                    f"📻 Currently playing: {self.current_playing_song}"
-                )
+                announcement = "✨ Welcome to our space! Type !help to discover commands. Support the space by tipping the bot! ❤️"
                 await self.highrise.chat(announcement)
                 self.last_highrise_activity = time.time() 
                 await asyncio.sleep(300)  
@@ -265,6 +258,7 @@ class SecurityRoomBot(BaseBot):
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
+                # Legacy SDK compatible format
                 await self.highrise.send_emote(emote_id, user_id)
             except Exception as e:
                 print(f"[LOOP ERROR] user_id={user_id} emote={emote_id}: {type(e).__name__}: {e}", flush=True)
@@ -279,7 +273,7 @@ class SecurityRoomBot(BaseBot):
         try:
             welcome_text = (
                 f"👋 Welcome to the room @{user.username}! 🎉\n"
-                f"🎵 Type '!song <track>' to suggest a song selection!\n"
+                f"💡 Type !help to see available loop commands!\n"
                 f"👑 Want permanent VIP? Tip the Bot 500g+! ❤️"
             )
             await self.highrise.chat(welcome_text)
@@ -345,30 +339,9 @@ class SecurityRoomBot(BaseBot):
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
-        
-        # --- 🎵 SIMPLIFIED OPEN SONG SELECTION PROCESSOR ---
-        if clean_msg.startswith("!song "):
-            requested_song = message[6:].strip() # Extract track details directly
-            if requested_song:
-                self.current_playing_song = requested_song
-                
-                # Grand Public Announcement Matrix
-                announcement = (
-                    f"📢 🎶 [NOW PLAYING] 🎶 📢\n"
-                    f"✨ DJ @{user.username} has changed the music! ✨\n"
-                    f"🔥 Track: '{requested_song}' is now playing in the club! Turn up! 💃🕺"
-                )
-                await self.highrise.chat(announcement)
-                
-                # Bot dancing reaction
-                try:
-                    await self.highrise.send_emote("dance-tiktok8", self.bot_id)
-                except Exception: pass
-            else:
-                await self.highrise.send_whisper(user.id, "❌ Please type a valid track name. (Example: !song Starboy)")
 
         # --- 🌐 PERSISTENT ACTIVE EMOTE ROUTING CORES ---
-        elif clean_msg.startswith("!loop "):
+        if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
                 if user.id in self.active_loops:
