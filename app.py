@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Instant Spawn & Empty Room Persistence
+Highrise Room Management Bot - Queue-Based 1-by-1 Tipping Engine
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -170,7 +170,6 @@ class SecurityRoomBot(BaseBot):
         self.owner_id = None  
         self.bot_id = None
         
-        # Explicit target spawn point
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -180,6 +179,10 @@ class SecurityRoomBot(BaseBot):
         ]
         
         self.active_emote_loops = {}
+        
+        # Centralized async tipping queue pipeline
+        self.tip_queue = asyncio.Queue()
+        
         self.load_tipped_users()
 
     def load_tipped_users(self):
@@ -226,6 +229,27 @@ class SecurityRoomBot(BaseBot):
             if user_id in self.active_emote_loops:
                 del self.active_emote_loops[user_id]
 
+    # —— SERIALIZED QUEUE WORKER ENGINE ——
+    async def process_tip_queue_worker(self):
+        """Processes transfers systematically 1-by-1 to eliminate dropouts"""
+        print("[QUEUE WORKER] Serialization processor activated.")
+        while True:
+            target_id, gold_bar_tier, username, reason = await self.tip_queue.get()
+            try:
+                # 1-by-1 targeted payout execution
+                await self.highrise.tip_user(target_id, gold_bar_tier)
+                
+                if reason == "welcome":
+                    await self.highrise.chat(f"🎉 @{username}, enjoy your 1g welcome bonus!")
+                
+                # Dynamic buffer delay between transactions to protect rate margins
+                await asyncio.sleep(1.2)
+            except Exception as queue_err:
+                print(f"[QUEUE WORKER ERROR] Payout failed for user {target_id}: {queue_err}")
+                await asyncio.sleep(2.0)
+            finally:
+                self.tip_queue.task_done()
+
     async def on_start(self, session_metadata: SessionMetadata) -> None:
         self.bot_id = session_metadata.user_id
         try:
@@ -234,22 +258,22 @@ class SecurityRoomBot(BaseBot):
 
         print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         
-        # INSTANT ZERO-DELAY TARGET TELEPORT ON STARTUP
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             print("[SPAWN SUCCESS] Bot placed instantly at x=14.0, y=0.5, z=31.0")
         except Exception as e: 
             print(f"[SPAWN FAILURE] Initial connection placement failed: {e}")
                 
+        # Fire up our single serialization line thread worker
+        asyncio.create_task(self.process_tip_queue_worker())
+        
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
 
     async def connection_watchdog_loop(self) -> None:
-        # Running continuously regardless of room occupancy to complement external cron execution
         while True:
             await asyncio.sleep(45) 
             try:
-                # Keep session persistent on an empty room socket
                 await self.highrise.get_wallet()
             except Exception as e:
                 print(f"[WATCHDOG HEARTBEAT WARNING] Empty room handshake failure: {e}")
@@ -260,7 +284,6 @@ class SecurityRoomBot(BaseBot):
                     for user, position in room_users.content:
                         if user.id == self.bot_id:
                             if isinstance(position, Position):
-                                # Snap back instantly if pushed or slid by room geometry physics
                                 if abs(position.x - 14.0) > 0.5 or abs(position.z - 31.0) > 0.5:
                                     print("[WATCHDOG ANCHOR] Correcting bot position shift back to spawn coordinates.")
                                     await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
@@ -271,7 +294,6 @@ class SecurityRoomBot(BaseBot):
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                # Check for other users first so it doesn't shout into a completely empty room
                 room_users = await self.highrise.get_room_users()
                 if room_users and hasattr(room_users, "content") and len(room_users.content) > 1:
                     await self.highrise.chat(
@@ -297,11 +319,8 @@ class SecurityRoomBot(BaseBot):
             
             if user.id not in self.tipped_users:
                 self.save_tipped_user(user.id)
-                try:
-                    await asyncio.sleep(0.8)
-                    await self.highrise.tip_user(user.id, "gold_bar_1")
-                    await self.highrise.chat(f"🎉 @{user.username}, enjoy your 1g welcome bonus!")
-                except Exception: pass
+                # INSTEAD OF DIRECT TIPPING: Push join payouts straight to the bottom of the queue line 
+                await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome"))
         except Exception as e: print(f"[JOIN ERROR] {e}")
 
     async def on_user_leave(self, user: User) -> None:
@@ -414,14 +433,15 @@ class SecurityRoomBot(BaseBot):
                             room_users = await self.highrise.get_room_users()
                             if room_users and hasattr(room_users, "content"):
                                 target_count = 0
+                                
+                                # Process entries and line them up seamlessly inside the queue
                                 for u, pos in room_users.content:
                                     if u.id != self.bot_id and u.username.lower() != self.owner_username.lower():
                                         target_count += 1
-                                        asyncio.create_task(self.highrise.tip_user(u.id, f"gold_bar_{amount_str}"))
-                                        await asyncio.sleep(0.2)
+                                        await self.tip_queue.put((u.id, f"gold_bar_{amount_str}", u.username, "giveall"))
                                 
                                 if target_count > 0:
-                                    await self.highrise.chat(f"🎁 [RAIN DROP] @{self.owner_username} tipped {amount_str}g to all {target_count} players in the room! 🎉")
+                                    await self.highrise.chat(f"🎁 [RAIN DROP QUEUED] Adding {target_count} players to the payout line for {amount_str}g transfers! Payout processing 1-by-1...")
                                 else:
                                     await self.highrise.send_whisper(user.id, "❌ No other eligible players found in the room to tip.")
                 except Exception as e: print(f"[GIVEALL FAIL] {e}")
