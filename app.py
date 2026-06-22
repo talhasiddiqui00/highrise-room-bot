@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Queue-Based 1-by-1 Tipping Engine
+Highrise Room Management Bot - Queue Tipping, Stay-Time Engine & Render Logging
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -179,10 +179,11 @@ class SecurityRoomBot(BaseBot):
         ]
         
         self.active_emote_loops = {}
-        
-        # Centralized async tipping queue pipeline
         self.tip_queue = asyncio.Queue()
         
+        # Room Stay Trackers
+        self.room_stay_tracker = {} 
+
         self.load_tipped_users()
 
     def load_tipped_users(self):
@@ -231,24 +232,51 @@ class SecurityRoomBot(BaseBot):
 
     # —— SERIALIZED QUEUE WORKER ENGINE ——
     async def process_tip_queue_worker(self):
-        """Processes transfers systematically 1-by-1 to eliminate dropouts"""
         print("[QUEUE WORKER] Serialization processor activated.")
         while True:
             target_id, gold_bar_tier, username, reason = await self.tip_queue.get()
             try:
-                # 1-by-1 targeted payout execution
                 await self.highrise.tip_user(target_id, gold_bar_tier)
                 
                 if reason == "welcome":
                     await self.highrise.chat(f"🎉 @{username}, enjoy your 1g welcome bonus!")
+                elif reason == "stay_reward":
+                    await self.highrise.chat(f"⏰ @{username} received 1g for supporting the room with their stay-time! 🎉")
                 
-                # Dynamic buffer delay between transactions to protect rate margins
+                print(f"[RENDER LOG - TIP] Tipped {gold_bar_tier} to @{username} successfully. Reason: {reason}")
                 await asyncio.sleep(1.2)
             except Exception as queue_err:
-                print(f"[QUEUE WORKER ERROR] Payout failed for user {target_id}: {queue_err}")
+                print(f"[RENDER LOG - EXCEPTION] Payout failed for user {target_id}: {queue_err}")
                 await asyncio.sleep(2.0)
             finally:
                 self.tip_queue.task_done()
+
+    # —— BACKGROUND STAY TIME ENGINE ——
+    async def track_user_stay_durations_loop(self):
+        """Evaluates intervals systematically every 30 seconds for all users"""
+        print("[STAY TIME ENGINE] Tracking loop activated.")
+        while True:
+            await asyncio.sleep(30)
+            now = time.time()
+            
+            # Create a copy to prevent mutation runtime errors
+            for user_id, data in list(self.room_stay_tracker.items()):
+                elapsed_seconds = now - data["join_time"]
+                elapsed_minutes = elapsed_seconds / 60.0
+                
+                # Milestone 1: 30 Minutes
+                if not data["hit_30m"] and elapsed_minutes >= 30.0:
+                    self.room_stay_tracker[user_id]["hit_30m"] = True
+                    # Push next milestone out by 60 minutes
+                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = 90.0 
+                    await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward"))
+                    print(f"[RENDER LOG - MILESTONE] @{data['username']} reached 30 minutes stay milestone. Tipping queued.")
+
+                # Milestone 2 & Up: Every 60 minutes after the first 30m
+                elif data["hit_30m"] and elapsed_minutes >= data["next_milestone_minutes"]:
+                    self.room_stay_tracker[user_id]["next_milestone_minutes"] += 60.0
+                    await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward"))
+                    print(f"[RENDER LOG - MILESTONE] @{data['username']} reached recurring milestone ({int(elapsed_minutes)}m). Tipping queued.")
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
         self.bot_id = session_metadata.user_id
@@ -256,16 +284,16 @@ class SecurityRoomBot(BaseBot):
             self.owner_id = session_metadata.room_info.owner_id
         except AttributeError: pass
 
-        print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
+        print(f"\n[RENDER LOG - STARTUP] Handshake confirmed with Highrise server via SDK 25.1.0.")
         
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
-            print("[SPAWN SUCCESS] Bot placed instantly at x=14.0, y=0.5, z=31.0")
+            print("[RENDER LOG - SPAWN] Bot placed instantly at x=14.0, y=0.5, z=31.0")
         except Exception as e: 
-            print(f"[SPAWN FAILURE] Initial connection placement failed: {e}")
+            print(f"[RENDER LOG - SPAWN ERROR] Initial connection placement failed: {e}")
                 
-        # Fire up our single serialization line thread worker
         asyncio.create_task(self.process_tip_queue_worker())
+        asyncio.create_task(self.track_user_stay_durations_loop())
         
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
@@ -276,7 +304,7 @@ class SecurityRoomBot(BaseBot):
             try:
                 await self.highrise.get_wallet()
             except Exception as e:
-                print(f"[WATCHDOG HEARTBEAT WARNING] Empty room handshake failure: {e}")
+                print(f"[RENDER LOG - CONNECTION WARNING] Empty room handshake failure / Disappeared drop: {e}")
 
             try:
                 room_users = await self.highrise.get_room_users()
@@ -285,11 +313,11 @@ class SecurityRoomBot(BaseBot):
                         if user.id == self.bot_id:
                             if isinstance(position, Position):
                                 if abs(position.x - 14.0) > 0.5 or abs(position.z - 31.0) > 0.5:
-                                    print("[WATCHDOG ANCHOR] Correcting bot position shift back to spawn coordinates.")
+                                    print(f"[RENDER LOG - POSITION DRIFT] Bot drifted to x={position.x}, z={position.z}. Teleporting back to spawn anchor.")
                                     await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
                             break
             except Exception as e:
-                print(f"[WATCHDOG POSITION WARNING] Failed to evaluate coordinates: {e}")
+                print(f"[RENDER LOG - ERROR] Failed to evaluate position boundaries: {e}")
 
     async def start_announcement_loop(self) -> None:
         while True:
@@ -299,7 +327,7 @@ class SecurityRoomBot(BaseBot):
                     await self.highrise.chat(
                         "✨ Welcome to our space! Type !help to discover commands. "
                         "Want to dance? Use '!loop <name>' or type '!stop' to finish! "
-                        "Support our room by tipping 500g for permanent VIP access. ❤️"
+                        "Stay active in our room to win gold passively! 🎁"
                     )
                 await asyncio.sleep(300)  
             except Exception: 
@@ -308,6 +336,16 @@ class SecurityRoomBot(BaseBot):
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
         if user.id == self.bot_id or "bot" in user.username.lower(): return
         if user.username.lower() == self.owner_username.lower(): self.owner_id = user.id
+
+        print(f"[RENDER LOG - JOIN] User @{user.username} entered the room.")
+
+        # Start tracking their stay parameters
+        self.room_stay_tracker[user.id] = {
+            "username": user.username,
+            "join_time": time.time(),
+            "hit_30m": False,
+            "next_milestone_minutes": 30.0
+        }
 
         try:
             welcome_text = (
@@ -319,12 +357,16 @@ class SecurityRoomBot(BaseBot):
             
             if user.id not in self.tipped_users:
                 self.save_tipped_user(user.id)
-                # INSTEAD OF DIRECT TIPPING: Push join payouts straight to the bottom of the queue line 
                 await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome"))
         except Exception as e: print(f"[JOIN ERROR] {e}")
 
     async def on_user_leave(self, user: User) -> None:
+        print(f"[RENDER LOG - LEAVE] User @{user.username} left the room.")
         await self.stop_user_emote(user.id)
+        
+        # Remove user from stay tracker to drop memory footprint and reset values
+        if user.id in self.room_stay_tracker:
+            del self.room_stay_tracker[user.id]
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -433,8 +475,6 @@ class SecurityRoomBot(BaseBot):
                             room_users = await self.highrise.get_room_users()
                             if room_users and hasattr(room_users, "content"):
                                 target_count = 0
-                                
-                                # Process entries and line them up seamlessly inside the queue
                                 for u, pos in room_users.content:
                                     if u.id != self.bot_id and u.username.lower() != self.owner_username.lower():
                                         target_count += 1
@@ -525,18 +565,18 @@ async def start_bot_engine():
         try:
             bot_instance = SecurityRoomBot()
             definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
-            print("[MAIN ENGINE] Launching integrated Highrise Client...")
+            print("[RENDER LOG - CRITICAL] Launching integrated Highrise Client...")
             await main(definitions=definitions)
         except Exception as engine_err:
-            print(f"[RECOVERY PIPELINE] Session dropped ({engine_err}). Retrying connection loop in 60s...")
+            print(f"[RENDER LOG - RECOVERY EVENT] Bot dropped off room socket ({engine_err}). Respawning connection loop in 60s...")
             await asyncio.sleep(60)
 
 if __name__ == "__main__":
     web_worker = threading.Thread(target=run_health_server, daemon=True)
     web_worker.start()
-    print("[WEB LAYER] Non-blocking server listening on port 10000...")
+    print("[RENDER LOG - WEB INFRA] Non-blocking server listening on port 10000...")
     
     try:
         asyncio.run(start_bot_engine())
     except KeyboardInterrupt:
-        print("Manual exit caught.")
+        print("[RENDER LOG - EXIT] Manual shutdown sequence executed.")
