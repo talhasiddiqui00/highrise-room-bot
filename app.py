@@ -247,12 +247,30 @@ class SecurityRoomBot(BaseBot):
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
-                # 25.1.0 TARGET SYNTAX - Bypasses server ownership drift bugs
                 await self.highrise.send_emote(emote_id=emote_id, user_id=user_id)
             except Exception:
                 print(f"[LOOP TERMINATED] User left or action broke: {user_id}", flush=True)
                 break
             await asyncio.sleep(duration)
+
+    # NEW: Sequence function to perform a multi-line singing performance with delays
+    async def sing_song_performance(self):
+        try:
+            # Line 1
+            await self.highrise.send_emote(emote_id="emote-sicklycute-sing-fast", user_id=self.bot_id)
+            await self.highrise.chat("🎶 ~ I found a soulmate in this beautiful space... ~ 🎶")
+            await asyncio.sleep(4.0)
+            
+            # Line 2
+            await self.highrise.send_emote(emote_id="emote-wings", user_id=self.bot_id)
+            await self.highrise.chat("✨ ~ Walking through the crowd, seeing your face... ~ ✨")
+            await asyncio.sleep(5.0)
+
+            # Line 3
+            await self.highrise.send_emote(emote_id="emote-sicklycute-sing-slow", user_id=self.bot_id)
+            await self.highrise.chat("🎤 ~ Welcome to the room, let's make a memory today! ~ ❤️")
+        except Exception as e:
+            print(f"[SINGING ERROR] Performance broke: {e}")
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
         self.last_highrise_activity = time.time()
@@ -322,7 +340,7 @@ class SecurityRoomBot(BaseBot):
                     else:
                         await self.highrise.chat(f"✨ [ROOM CONTRIBUTION] ✨\nThank you profoundly @{sender.username} for supporting our space with a {tip.amount}g tip! ❤️")
                         self.last_highrise_activity = time.time()
-            except Exception as e: print(f"[TIP ROUTING FAIL] {e}")
+            except Exception as e: print(f"[VIP ROUTING FAIL] {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
         self.last_highrise_activity = time.time()
@@ -355,6 +373,10 @@ class SecurityRoomBot(BaseBot):
                 self.active_loops[user.id].cancel()
                 del self.active_loops[user.id]
                 await self.highrise.send_whisper(user.id, "✅ Your active loop routine has been successfully closed.")
+
+        # NEW: Song command trigger
+        elif clean_msg == "!sing":
+            asyncio.create_task(self.sing_song_performance())
 
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
@@ -447,7 +469,7 @@ class SecurityRoomBot(BaseBot):
             elif user.id in self.vip_users:
                 await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down' to travel between floors.\nEmote loop tracker: Type '!loop <name>' or '!stop'.")
             else:
-                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote loop tracker: Type '!loop <name>'.")
+                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote loop tracker: Type '!loop <name>' or '!sing'.")
                 
         elif clean_msg == "!vip":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
