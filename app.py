@@ -253,25 +253,6 @@ class SecurityRoomBot(BaseBot):
                 break
             await asyncio.sleep(duration)
 
-    # NEW: Sequence function to perform a multi-line singing performance with delays
-    async def sing_song_performance(self):
-        try:
-            # Line 1
-            await self.highrise.send_emote(emote_id="emote-sicklycute-sing-fast", user_id=self.bot_id)
-            await self.highrise.chat("🎶 ~ I found a soulmate in this beautiful space... ~ 🎶")
-            await asyncio.sleep(4.0)
-            
-            # Line 2
-            await self.highrise.send_emote(emote_id="emote-wings", user_id=self.bot_id)
-            await self.highrise.chat("✨ ~ Walking through the crowd, seeing your face... ~ ✨")
-            await asyncio.sleep(5.0)
-
-            # Line 3
-            await self.highrise.send_emote(emote_id="emote-sicklycute-sing-slow", user_id=self.bot_id)
-            await self.highrise.chat("🎤 ~ Welcome to the room, let's make a memory today! ~ ❤️")
-        except Exception as e:
-            print(f"[SINGING ERROR] Performance broke: {e}")
-
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
         self.last_highrise_activity = time.time()
         if user.id == self.bot_id or "bot" in user.username.lower(): return
@@ -374,10 +355,6 @@ class SecurityRoomBot(BaseBot):
                 del self.active_loops[user.id]
                 await self.highrise.send_whisper(user.id, "✅ Your active loop routine has been successfully closed.")
 
-        # NEW: Song command trigger
-        elif clean_msg == "!sing":
-            asyncio.create_task(self.sing_song_performance())
-
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
             if clean_msg == "!bal":
@@ -469,7 +446,7 @@ class SecurityRoomBot(BaseBot):
             elif user.id in self.vip_users:
                 await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down' to travel between floors.\nEmote loop tracker: Type '!loop <name>' or '!stop'.")
             else:
-                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote loop tracker: Type '!loop <name>' or '!sing'.")
+                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote loop tracker: Type '!loop <name>'.")
                 
         elif clean_msg == "!vip":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
