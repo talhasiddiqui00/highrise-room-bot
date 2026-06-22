@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Pure User Emote Looping Edition
+Highrise Room Management Bot - Instant Spawn & Empty Room Persistence
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -17,7 +17,6 @@ import threading
 from highrise import BaseBot, User, Position, AnchorPosition
 from highrise.models import SessionMetadata, CurrencyItem, Item
 
-# Force unbuffered stdout so logs actually appear on Render immediately
 sys.stdout.reconfigure(line_buffering=True)
 os.environ["PYTHONUNBUFFERED"] = "1"
 
@@ -170,8 +169,8 @@ class SecurityRoomBot(BaseBot):
         self.owner_username = "sadi_key"
         self.owner_id = None  
         self.bot_id = None
-        self.last_highrise_activity = time.time()
         
+        # Explicit target spawn point
         self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
         
         self.vip_spawn_points = [
@@ -180,7 +179,6 @@ class SecurityRoomBot(BaseBot):
             Position(27.5, 23.0, 30.0, facing="FrontRight")
         ]
         
-        # Track loop tasks per user securely
         self.active_emote_loops = {}
         self.load_tipped_users()
 
@@ -207,7 +205,6 @@ class SecurityRoomBot(BaseBot):
             while True:
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
-                # TARGET USER FOR THE EMOTE, NOT THE BOT
                 await self.highrise.send_emote(emote_id, user_id)
                 await asyncio.sleep(duration)
         except asyncio.CancelledError:
@@ -236,25 +233,26 @@ class SecurityRoomBot(BaseBot):
         except AttributeError: pass
 
         print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
-        self.last_highrise_activity = time.time()
         
+        # INSTANT ZERO-DELAY TARGET TELEPORT ON STARTUP
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
             print("[SPAWN SUCCESS] Bot placed instantly at x=14.0, y=0.5, z=31.0")
         except Exception as e: 
-            print(f"[SPAWN RETRY] Handshake delayed: {e}")
+            print(f"[SPAWN FAILURE] Initial connection placement failed: {e}")
                 
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
 
     async def connection_watchdog_loop(self) -> None:
+        # Running continuously regardless of room occupancy to complement external cron execution
         while True:
             await asyncio.sleep(45) 
             try:
+                # Keep session persistent on an empty room socket
                 await self.highrise.get_wallet()
-                self.last_highrise_activity = time.time()
             except Exception as e:
-                print(f"[WATCHDOG HEARTBEAT WARNING] Wallet ping failed: {e}")
+                print(f"[WATCHDOG HEARTBEAT WARNING] Empty room handshake failure: {e}")
 
             try:
                 room_users = await self.highrise.get_room_users()
@@ -262,31 +260,30 @@ class SecurityRoomBot(BaseBot):
                     for user, position in room_users.content:
                         if user.id == self.bot_id:
                             if isinstance(position, Position):
-                                if abs(position.x - 14.0) > 0.8 or abs(position.z - 31.0) > 0.8:
-                                    print("[WATCHDOG ANCHOR] Correcting bot position drift back to spawn coordinates.")
+                                # Snap back instantly if pushed or slid by room geometry physics
+                                if abs(position.x - 14.0) > 0.5 or abs(position.z - 31.0) > 0.5:
+                                    print("[WATCHDOG ANCHOR] Correcting bot position shift back to spawn coordinates.")
                                     await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
                             break
             except Exception as e:
-                print(f"[WATCHDOG POSITION WARNING] Failed to track users: {e}")
-
-            if time.time() - self.last_highrise_activity > 480:
-                print("[INFO] No external room activity recorded recently, but connection lines remain live.")
+                print(f"[WATCHDOG POSITION WARNING] Failed to evaluate coordinates: {e}")
 
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                await self.highrise.chat(
-                    "✨ Welcome to our space! Type !help to discover commands. "
-                    "Want to dance? Use '!loop <name>' or type '!stop' to finish! "
-                    "Support our room by tipping 500g for permanent VIP access. ❤️"
-                )
-                self.last_highrise_activity = time.time() 
+                # Check for other users first so it doesn't shout into a completely empty room
+                room_users = await self.highrise.get_room_users()
+                if room_users and hasattr(room_users, "content") and len(room_users.content) > 1:
+                    await self.highrise.chat(
+                        "✨ Welcome to our space! Type !help to discover commands. "
+                        "Want to dance? Use '!loop <name>' or type '!stop' to finish! "
+                        "Support our room by tipping 500g for permanent VIP access. ❤️"
+                    )
                 await asyncio.sleep(300)  
             except Exception: 
                 await asyncio.sleep(10)
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
-        self.last_highrise_activity = time.time()
         if user.id == self.bot_id or "bot" in user.username.lower(): return
         if user.username.lower() == self.owner_username.lower(): self.owner_id = user.id
 
@@ -297,7 +294,6 @@ class SecurityRoomBot(BaseBot):
                 f"👑 Want permanent VIP? Tip the Bot 500g+ or support us by tipping the Jar! ❤️"
             )
             await self.highrise.chat(welcome_text)
-            self.last_highrise_activity = time.time()
             
             if user.id not in self.tipped_users:
                 self.save_tipped_user(user.id)
@@ -305,12 +301,10 @@ class SecurityRoomBot(BaseBot):
                     await asyncio.sleep(0.8)
                     await self.highrise.tip_user(user.id, "gold_bar_1")
                     await self.highrise.chat(f"🎉 @{user.username}, enjoy your 1g welcome bonus!")
-                    self.last_highrise_activity = time.time()
                 except Exception: pass
         except Exception as e: print(f"[JOIN ERROR] {e}")
 
     async def on_user_leave(self, user: User) -> None:
-        self.last_highrise_activity = time.time()
         await self.stop_user_emote(user.id)
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
@@ -322,14 +316,12 @@ class SecurityRoomBot(BaseBot):
         except Exception: pass
 
     async def on_whisper(self, user: User, message: str) -> None:
-        self.last_highrise_activity = time.time()
         if user.id == self.bot_id: return
         try:
             await self.highrise.send_whisper(user.id, "Come to the room if you want to talk or command with me!")
         except Exception: pass
 
     async def on_tip(self, sender: User, receiver: User, tip: Union[CurrencyItem, Item]) -> None:
-        self.last_highrise_activity = time.time()
         if sender.id == self.bot_id: return
 
         if isinstance(tip, CurrencyItem):
@@ -346,15 +338,12 @@ class SecurityRoomBot(BaseBot):
                             f"Deep gratitude to @{sender.username} for the generous {tip.amount}g tip! "
                             f"LIFETIME VIP ACCESS granted successfully! Check your whispers for commands. 🚀"
                         )
-                        self.last_highrise_activity = time.time()
                         if is_new: await self.send_vip_welcome_packet(sender.id, sender.username)
                     else:
                         await self.highrise.chat(f"✨ [ROOM CONTRIBUTION] ✨\nThank you profoundly @{sender.username} for supporting our space with a {tip.amount}g tip! ❤️")
-                        self.last_highrise_activity = time.time()
             except Exception as e: print(f"[VIP TIP ERROR] {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
-        self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
         
