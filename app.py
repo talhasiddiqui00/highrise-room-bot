@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Pure 25.1.0 Latest Production Engine
+Highrise Room Management Bot - Pure User Emote Looping Edition
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -157,7 +157,7 @@ EMOTE_MAP = {
     "jinglebell": {"id": "dance-jinglebell", "duration": 11.0},
     "nervous": {"id": "idle-nervous", "duration": 21.7},
     "toilet": {"id": "idle-toilet", "duration": 32.1},
-    "attention": {"id": "emote-attention", "duration": 4.4},
+    "attention": {"id": "emote-attention", "duration": 4.40},
     "astronaut": {"id": "emote-astronaut", "duration": 13.7},
     "dancezombie": {"id": "dance-zombie", "duration": 14.1}
 }
@@ -180,7 +180,8 @@ class SecurityRoomBot(BaseBot):
             Position(27.5, 23.0, 30.0, facing="FrontRight")
         ]
         
-        self.active_loops = {}
+        # Track loop tasks per user securely
+        self.active_emote_loops = {}
         self.load_tipped_users()
 
     def load_tipped_users(self):
@@ -201,18 +202,47 @@ class SecurityRoomBot(BaseBot):
             except Exception as e:
                 print(f"[MEMORY ERROR] Failed to save storage: {e}")
 
+    async def loop_emote_handler(self, user_id: str, emote_id: str, duration: float) -> None:
+        try:
+            while True:
+                if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
+                    break
+                # TARGET USER FOR THE EMOTE, NOT THE BOT
+                await self.highrise.send_emote(emote_id, user_id)
+                await asyncio.sleep(duration)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Error in loop_emote for user {user_id}: {e}")
+        finally:
+            if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
+                del self.active_emote_loops[user_id]
+
+    async def stop_user_emote(self, user_id: str) -> None:
+        if user_id in self.active_emote_loops:
+            task = self.active_emote_loops[user_id]["task"]
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            if user_id in self.active_emote_loops:
+                del self.active_emote_loops[user_id]
+
     async def on_start(self, session_metadata: SessionMetadata) -> None:
         self.bot_id = session_metadata.user_id
         try:
             self.owner_id = session_metadata.room_info.owner_id
         except AttributeError: pass
 
-        print(f"\n[BOT ACTIVE] Production Engine initialized successfully on SDK 25.1.0.")
+        print(f"\n[BOT ACTIVE] Handshake confirmed with Highrise server via SDK 25.1.0.")
         self.last_highrise_activity = time.time()
         
         try:
             await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
-        except Exception: pass
+            print("[SPAWN SUCCESS] Bot placed instantly at x=14.0, y=0.5, z=31.0")
+        except Exception as e: 
+            print(f"[SPAWN RETRY] Handshake delayed: {e}")
                 
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
@@ -221,37 +251,39 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(45) 
             try:
-                wallet_response = await self.highrise.get_wallet()
+                await self.highrise.get_wallet()
                 self.last_highrise_activity = time.time()
-                
+            except Exception as e:
+                print(f"[WATCHDOG HEARTBEAT WARNING] Wallet ping failed: {e}")
+
+            try:
                 room_users = await self.highrise.get_room_users()
                 if room_users and hasattr(room_users, "content"):
                     for user, position in room_users.content:
                         if user.id == self.bot_id:
                             if isinstance(position, Position):
                                 if abs(position.x - 14.0) > 0.8 or abs(position.z - 31.0) > 0.8:
+                                    print("[WATCHDOG ANCHOR] Correcting bot position drift back to spawn coordinates.")
                                     await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
                             break
-            except Exception: pass
+            except Exception as e:
+                print(f"[WATCHDOG POSITION WARNING] Failed to track users: {e}")
+
+            if time.time() - self.last_highrise_activity > 480:
+                print("[INFO] No external room activity recorded recently, but connection lines remain live.")
 
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                announcement = "✨ Welcome to our space! Type !help to discover commands. Support the space by tipping the bot! ❤️"
-                await self.highrise.chat(announcement)
+                await self.highrise.chat(
+                    "✨ Welcome to our space! Type !help to discover commands. "
+                    "Want to dance? Use '!loop <name>' or type '!stop' to finish! "
+                    "Support our room by tipping 500g for permanent VIP access. ❤️"
+                )
                 self.last_highrise_activity = time.time() 
                 await asyncio.sleep(300)  
             except Exception: 
                 await asyncio.sleep(10)
-
-    async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
-        while True:
-            try:
-                await self.highrise.send_emote(emote_id=emote_id, user_id=user_id)
-            except Exception:
-                print(f"[LOOP TERMINATED] User left or action broke: {user_id}", flush=True)
-                break
-            await asyncio.sleep(duration)
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
         self.last_highrise_activity = time.time()
@@ -261,8 +293,8 @@ class SecurityRoomBot(BaseBot):
         try:
             welcome_text = (
                 f"👋 Welcome to the room @{user.username}! 🎉\n"
-                f"💡 Type !help to see available loop commands!\n"
-                f"👑 Want permanent VIP? Tip the Bot 500g+! ❤️"
+                f"💡 Type '!help' to view Guest Commands.\n"
+                f"👑 Want permanent VIP? Tip the Bot 500g+ or support us by tipping the Jar! ❤️"
             )
             await self.highrise.chat(welcome_text)
             self.last_highrise_activity = time.time()
@@ -279,9 +311,7 @@ class SecurityRoomBot(BaseBot):
 
     async def on_user_leave(self, user: User) -> None:
         self.last_highrise_activity = time.time()
-        if user.id in self.active_loops:
-            self.active_loops[user.id].cancel()
-            del self.active_loops[user.id]
+        await self.stop_user_emote(user.id)
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -321,41 +351,37 @@ class SecurityRoomBot(BaseBot):
                     else:
                         await self.highrise.chat(f"✨ [ROOM CONTRIBUTION] ✨\nThank you profoundly @{sender.username} for supporting our space with a {tip.amount}g tip! ❤️")
                         self.last_highrise_activity = time.time()
-            except Exception as e: print(f"[VIP ROUTING FAIL] {e}")
+            except Exception as e: print(f"[VIP TIP ERROR] {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
         print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
-
-        # --- 🌐 PERSISTENT ACTIVE EMOTE ROUTING CORES ---
+        
+        # —— USER LOOP EMOTE COMMAND ROUTINES ——
         if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
-                if user.id in self.active_loops:
-                    self.active_loops[user.id].cancel()
+                await self.stop_user_emote(user.id)
                 
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
-                try:
-                    await self.highrise.send_emote(emote_id=emote_id, user_id=user.id)
-                except Exception as e:
-                    print(f"[EMOTE FAIL] Initial trigger rejected: {e}", flush=True)
-                
-                self.active_loops[user.id] = asyncio.create_task(
-                    self.continuous_loop_handler(user_id=user.id, emote_id=emote_id, duration=duration)
-                )
+                task = asyncio.create_task(self.loop_emote_handler(user.id, emote_id, duration))
+                self.active_emote_loops[user.id] = {
+                    "task": task,
+                    "emote_id": emote_id
+                }
+                await self.highrise.send_whisper(user.id, f"✅ Started your loops for '{emote_name}'. Type '!stop' to end.")
             else:
-                await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Please check the emote spelling.")
+                await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Please check spelling.")
 
         elif clean_msg == "!stop":
-            if user.id in self.active_loops:
-                self.active_loops[user.id].cancel()
-                del self.active_loops[user.id]
-                await self.highrise.send_whisper(user.id, "✅ Your active loop routine has been successfully closed.")
+            if user.id in self.active_emote_loops:
+                await self.stop_user_emote(user.id)
+                await self.highrise.send_whisper(user.id, "✅ Your active loops have been closed.")
 
-        # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
+        # —— OWNER PRIVILEGE BLOCK ——
         if user.username.lower() == self.owner_username.lower():
             if clean_msg == "!bal":
                 try:
@@ -439,7 +465,7 @@ class SecurityRoomBot(BaseBot):
                                 await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
                 except Exception as e: print(f"[REMOVEVIP FAIL] {e}")
 
-        # --- 💡 GENERAL PUBLIC COMMAND UTILITIES ---
+        # —— NAVIGATION & UTILITIES ——
         if clean_msg == "!help":
             if user.username.lower() == self.owner_username.lower():
                 await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user")
@@ -451,6 +477,7 @@ class SecurityRoomBot(BaseBot):
         elif clean_msg == "!vip":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
                 try:
+                    await self.highrise.send_whisper(user.id, "🚀 Teleporting up to luxury lounge...")
                     await self.highrise.teleport(user.id, random.choice(self.vip_spawn_points))
                 except Exception: pass
             else:
@@ -459,11 +486,12 @@ class SecurityRoomBot(BaseBot):
         elif clean_msg == "!down":
             if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
                 try:
+                    await self.highrise.send_whisper(user.id, "⬇️ Returning back to the ground floor...")
                     await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
                 except Exception: pass
 
 # =====================================================================
-# 🚀 2. LIGHTWEIGHT WEB LAYER WITH AUTO-RECOVERY PIPELINE
+# 🚀 LIGHTWEIGHT WEB LAYER WITH AUTO-RECOVERY PIPELINE
 # =====================================================================
 class LightHealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -487,7 +515,6 @@ async def start_bot_engine():
     while True:
         try:
             bot_instance = SecurityRoomBot()
-            bot_instance.owner_username = "sadi_key"
             definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
             print("[MAIN ENGINE] Launching integrated Highrise Client...")
             await main(definitions=definitions)
@@ -498,6 +525,7 @@ async def start_bot_engine():
 if __name__ == "__main__":
     web_worker = threading.Thread(target=run_health_server, daemon=True)
     web_worker.start()
+    print("[WEB LAYER] Non-blocking server listening on port 10000...")
     
     try:
         asyncio.run(start_bot_engine())
