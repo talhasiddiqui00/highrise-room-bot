@@ -1,9 +1,8 @@
 """
-Highrise Room Management Bot - Production Engine
+Highrise Room Management Bot - Pure 25.1.0 Latest Production Engine
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
-Features: Session isolation, Loyalty Milestones, Premium Jukebox Web Stream Server + Manual !song override
 """
 
 import os
@@ -11,9 +10,8 @@ import sys
 import time
 import random
 import asyncio
-import subprocess
 from typing import Union
-from flask import Flask, Response
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 
 from highrise import BaseBot, User, Position, AnchorPosition
@@ -23,12 +21,6 @@ from highrise.models import SessionMetadata, CurrencyItem, Item
 sys.stdout.reconfigure(line_buffering=True)
 os.environ["PYTHONUNBUFFERED"] = "1"
 
-# Global Shared Streaming Variables
-MUSIC_QUEUE = []          # Holds paths to downloaded temp MP3 files
-CURRENT_TRACK = None      # Tracks text status of currently playing file
-BACKGROUND_RADIO_URL = "https://stream.radioparadise.com/mp3-128"
-
-app = Flask(__name__)
 MEMORY_FILE = "tipped_users.txt"
 
 EMOTE_MAP = {
@@ -189,7 +181,6 @@ class SecurityRoomBot(BaseBot):
         ]
         
         self.active_loops = {}
-        self.room_activity_tracker = {} 
         self.load_tipped_users()
 
     def load_tipped_users(self):
@@ -225,8 +216,6 @@ class SecurityRoomBot(BaseBot):
                 
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
-        asyncio.create_task(self.loyalty_milestone_worker())
-        asyncio.create_task(self.bot_avatar_dance_worker())
 
     async def connection_watchdog_loop(self) -> None:
         while True:
@@ -248,79 +237,18 @@ class SecurityRoomBot(BaseBot):
     async def start_announcement_loop(self) -> None:
         while True:
             try:
-                announcement = "✨ Tip the Bot 30g+ with a song name or type !song to add your track to the Virtual DJ Jukebox! 🎵"
+                announcement = "✨ Welcome to our space! Type !help to discover commands. Support the space by tipping the bot! ❤️"
                 await self.highrise.chat(announcement)
                 self.last_highrise_activity = time.time() 
                 await asyncio.sleep(300)  
             except Exception: 
                 await asyncio.sleep(10)
 
-    async def loyalty_milestone_worker(self) -> None:
-        while True:
-            await asyncio.sleep(60)
-            try:
-                room_users = await self.highrise.get_room_users()
-                if not room_users or not hasattr(room_users, "content"):
-                    continue
-
-                current_active_ids = []
-                now = time.time()
-
-                for user, position in room_users.content:
-                    if user.id == self.bot_id or "bot" in user.username.lower():
-                        continue
-                    
-                    current_active_ids.append(user.id)
-
-                    if user.id not in self.room_activity_tracker:
-                        self.room_activity_tracker[user.id] = {
-                            "join_time": now,
-                            "username": user.username,
-                            "milestones_hit": set()
-                        }
-
-                    user_data = self.room_activity_tracker[user.id]
-                    elapsed_minutes = int((now - user_data["join_time"]) / 60)
-
-                    target_milestone = None
-
-                    if elapsed_minutes >= 15 and 15 not in user_data["milestones_hit"]:
-                        target_milestone = 15
-                    elif elapsed_minutes >= 40 and 40 not in user_data["milestones_hit"]:
-                        target_milestone = 40
-                    elif elapsed_minutes >= 90 and 90 not in user_data["milestones_hit"]:
-                        target_milestone = 90
-                    elif elapsed_minutes > 90:
-                        extra_time = elapsed_minutes - 90
-                        if extra_time % 30 == 0 and elapsed_minutes not in user_data["milestones_hit"]:
-                            target_milestone = elapsed_minutes
-
-                    if target_milestone:
-                        user_data["milestones_hit"].add(target_milestone)
-                        try:
-                            await self.highrise.tip_user(user.id, "gold_bar_1")
-                            await self.highrise.chat(f"🎉 Congrats @{user.username}! You've been active for {elapsed_minutes} mins and earned a 1g loyalty bonus! 👑")
-                            self.last_highrise_activity = time.time()
-                            await asyncio.sleep(0.5)
-                        except Exception: pass
-
-                for tracked_id in list(self.room_activity_tracker.keys()):
-                    if tracked_id not in current_active_ids:
-                        del self.room_activity_tracker[tracked_id]
-            except Exception: pass
-
-    async def bot_avatar_dance_worker(self) -> None:
-        """Keeps the bot's avatar animating to show it's live or pulsing to tracks"""
-        while True:
-            try:
-                await self.highrise.send_emote(emote_id="dance-handsup", target_user_id=self.bot_id)
-            except Exception: pass
-            await asyncio.sleep(20)
-
     async def continuous_loop_handler(self, user_id: str, emote_id: str, duration: float):
         while True:
             try:
-                await self.highrise.send_emote(emote_id=emote_id, target_user_id=user_id)
+                # 25.1.0 TARGET SYNTAX - Bypasses server ownership drift bugs
+                await self.highrise.send_emote(emote_id=emote_id, user_id=user_id)
             except Exception:
                 print(f"[LOOP TERMINATED] User left or action broke: {user_id}", flush=True)
                 break
@@ -330,13 +258,6 @@ class SecurityRoomBot(BaseBot):
         self.last_highrise_activity = time.time()
         if user.id == self.bot_id or "bot" in user.username.lower(): return
         if user.username.lower() == self.owner_username.lower(): self.owner_id = user.id
-
-        if user.id not in self.room_activity_tracker:
-            self.room_activity_tracker[user.id] = {
-                "join_time": time.time(),
-                "username": user.username,
-                "milestones_hit": set()
-            }
 
         try:
             welcome_text = (
@@ -362,9 +283,6 @@ class SecurityRoomBot(BaseBot):
         if user.id in self.active_loops:
             self.active_loops[user.id].cancel()
             del self.active_loops[user.id]
-        
-        if user.id in self.room_activity_tracker:
-            del self.room_activity_tracker[user.id]
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
@@ -382,7 +300,6 @@ class SecurityRoomBot(BaseBot):
         except Exception: pass
 
     async def on_tip(self, sender: User, receiver: User, tip: Union[CurrencyItem, Item]) -> None:
-        global CURRENT_TRACK
         self.last_highrise_activity = time.time()
         if sender.id == self.bot_id: return
 
@@ -392,32 +309,13 @@ class SecurityRoomBot(BaseBot):
                 is_to_owner = (receiver.id == self.owner_id or receiver.username.lower() == self.owner_username.lower())
 
                 if is_to_bot or is_to_owner:
-                    if 30 <= tip.amount < 500:
-                        song_name = tip.comment.strip() if (hasattr(tip, "comment") and tip.comment) else ""
-                        
-                        if song_name:
-                            file_id = int(time.time())
-                            out_path = f"/tmp/{file_id}"
-                            
-                            # Fire off background yt-dlp download thread inside Render /tmp space
-                            cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "-o", f"{out_path}.%(ext)s", f"ytsearch1:{song_name}"]
-                            subprocess.Popen(cmd)
-                            
-                            MUSIC_QUEUE.append(f"{out_path}.mp3")
-                            CURRENT_TRACK = song_name
-                            
-                            await self.highrise.chat(f"🎫 Jukebox Request Added! @{sender.username} tipped {tip.amount}g for '{song_name}'.")
-                            self.last_highrise_activity = time.time()
-                        else:
-                            await self.highrise.send_whisper(sender.id, "⚠️ Tip recorded, but no song name was typed into the tip note! Write the song title next time.")
-
-                    elif tip.amount >= 500:
+                    if tip.amount >= 500:
                         is_new = sender.id not in self.vip_users
                         if is_new: self.vip_users.append(sender.id)
                         await self.highrise.chat(
                             f"✨ 👑 [VIP PROMOTION] 👑 ✨\n"
                             f"Deep gratitude to @{sender.username} for the generous {tip.amount}g tip! "
-                            f"LIFETIME VIP ACCESS granted successfully! Check whispers for commands. 🚀"
+                            f"LIFETIME VIP ACCESS granted successfully! Check your whispers for commands. 🚀"
                         )
                         self.last_highrise_activity = time.time()
                         if is_new: await self.send_vip_welcome_packet(sender.id, sender.username)
@@ -427,39 +325,9 @@ class SecurityRoomBot(BaseBot):
             except Exception as e: print(f"[TIP ROUTING FAIL] {e}")
 
     async def on_chat(self, user: User, message: str) -> None:
-        global CURRENT_TRACK
         self.last_highrise_activity = time.time()
         clean_msg = message.lower().strip()
-
-        # --- 🎵 DIRECT TEXT-BASED !SONG OWNER OVERRIDE ENGINE ---
-        if clean_msg.startswith("!song ") and user.username.lower() == self.owner_username.lower():
-            try:
-                song_name = message[6:].strip()
-                if not song_name: return
-
-                file_id = int(time.time())
-                out_path = f"/tmp/{file_id}"
-                
-                cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "-o", f"{out_path}.%(ext)s", f"ytsearch1:{song_name}"]
-                subprocess.Popen(cmd)
-                
-                MUSIC_QUEUE.append(f"{out_path}.mp3")
-                CURRENT_TRACK = song_name
-
-                await self.highrise.chat(f"🎵 Owner override caught! Downloading '{song_name}' into stream buffer...")
-            except Exception as e:
-                print(f"[ERROR IN !SONG OVERRIDE] {e}")
-            return 
-
-        # --- PUBLIC Jukebox Status Command ---
-        if clean_msg in ["!queue", "!songs"]:
-            try:
-                if not MUSIC_QUEUE and not CURRENT_TRACK:
-                    await self.highrise.send_whisper(user.id, "🎵 Jukebox stream queue is currently empty.")
-                else:
-                    await self.highrise.send_whisper(user.id, f"▶️ Streaming Active Track. Upcoming tracks in queue: {len(MUSIC_QUEUE)}")
-            except Exception as e: print(f"[ERROR IN !QUEUE] {e}")
-            return
+        print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
 
         # --- 🌐 PERSISTENT ACTIVE EMOTE ROUTING CORES ---
         if clean_msg.startswith("!loop "):
@@ -472,22 +340,21 @@ class SecurityRoomBot(BaseBot):
                 duration = EMOTE_MAP[emote_name]["duration"]
                 
                 try:
-                    await self.highrise.send_emote(emote_id=emote_id, target_user_id=user.id)
-                except Exception as e: pass
+                    await self.highrise.send_emote(emote_id=emote_id, user_id=user.id)
+                except Exception as e:
+                    print(f"[EMOTE FAIL] Initial trigger rejected: {e}", flush=True)
                 
                 self.active_loops[user.id] = asyncio.create_task(
                     self.continuous_loop_handler(user_id=user.id, emote_id=emote_id, duration=duration)
                 )
             else:
-                await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Please check the spelling.")
-            return
+                await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Please check the emote spelling.")
 
         elif clean_msg == "!stop":
             if user.id in self.active_loops:
                 self.active_loops[user.id].cancel()
                 del self.active_loops[user.id]
-                await self.highrise.send_whisper(user.id, "✅ Your active loop routine has been closed.")
-            return
+                await self.highrise.send_whisper(user.id, "✅ Your active loop routine has been successfully closed.")
 
         # --- ⚡ OWNER ONLY COMMAND PATHWAYS ---
         if user.username.lower() == self.owner_username.lower():
@@ -498,11 +365,6 @@ class SecurityRoomBot(BaseBot):
                         bot_gold = next((item.amount for item in wallet_response.content if item.type == "gold"), 0)
                         await self.highrise.send_whisper(user.id, f"💰 [VAULT BALANCE] {bot_gold} gold remains securely in reserve.")
                 except Exception as e: print(f"[BALANCE FAIL] {e}")
-
-            elif clean_msg == "!skip":
-                MUSIC_QUEUE.clear()
-                CURRENT_TRACK = None
-                await self.highrise.chat("🎵 Jukebox pipeline queue cleared manually by the Room Owner.")
                     
             elif clean_msg.startswith("!with"):
                 try:
@@ -513,7 +375,7 @@ class SecurityRoomBot(BaseBot):
                             await self.highrise.send_whisper(user.id, f"💸 [WITHDRAWAL] Executing {raw_amount}g bar transfer...")
                             await self.highrise.tip_user(user.id, f"gold_bar_{raw_amount}")
                 except Exception as e: print(f"[WITHDRAWAL FAIL] {e}")
-
+                    
             elif clean_msg.startswith("!give "):
                 try:
                     parts = message.split()  
@@ -547,7 +409,7 @@ class SecurityRoomBot(BaseBot):
                                 if target_count > 0:
                                     await self.highrise.chat(f"🎁 [RAIN DROP] @{self.owner_username} tipped {amount_str}g to all {target_count} players in the room! 🎉")
                                 else:
-                                    await self.highrise.send_whisper(user.id, "❌ No other eligible players found to tip.")
+                                    await self.highrise.send_whisper(user.id, "❌ No other eligible players found in the room to tip.")
                 except Exception as e: print(f"[GIVEALL FAIL] {e}")
 
             elif clean_msg.startswith("!givevip "):
@@ -578,71 +440,67 @@ class SecurityRoomBot(BaseBot):
                                 await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
                 except Exception as e: print(f"[REMOVEVIP FAIL] {e}")
 
-        # --- 💡 GENERAL PUBLIC HELP DESK UTILITIES ---
+        # --- 💡 GENERAL PUBLIC COMMAND UTILITIES ---
         if clean_msg == "!help":
             if user.username.lower() == self.owner_username.lower():
-                await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user | !song <name>")
+                await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user")
             elif user.id in self.vip_users:
-                await self.highrise.send_whisper(user.id, "💡 VIP Lounge Commands: !vip (Lounge Level) | !down (Main Floor) | !loop <emote>")
+                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down' to travel between floors.\nEmote loop tracker: Type '!loop <name>' or '!stop'.")
             else:
-                await self.highrise.send_whisper(user.id, "💡 Public Loop Utilities: Type '!loop disco' or '!loop continuous'. Type !stop to break.")
-
-# --- 🌐 LIVE WEBSTREAM ENGINE FOR HIGHRISE JUKEBOX BOX ---
-@app.route("/room_music")
-def stream_audio():
-    def generate_stream_chunks():
-        while True:
-            if MUSIC_QUEUE:
-                active_song_file = MUSIC_QUEUE.pop(0)
-                # Give yt-dlp 3 quick seconds to finish downloading to disk space
-                time.sleep(3)
-                if os.path.exists(active_song_file):
-                    ffmpeg_process = subprocess.Popen(
-                        ["ffmpeg", "-re", "-i", active_song_file, "-f", "mp3", "pipe:1"],
-                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-                    )
-                    while True:
-                        chunk = ffmpeg_process.stdout.read(4096)
-                        if not chunk: break
-                        yield chunk
-                    try: os.remove(active_song_file)
-                    except Exception: pass
+                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote loop tracker: Type '!loop <name>'.")
+                
+        elif clean_msg == "!vip":
+            if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
+                try:
+                    await self.highrise.teleport(user.id, random.choice(self.vip_spawn_points))
+                except Exception: pass
             else:
-                # Idle Fallback state: Play 24/7 Radio Station
-                ffmpeg_process = subprocess.Popen(
-                    ["ffmpeg", "-re", "-i", BACKGROUND_RADIO_URL, "-f", "mp3", "pipe:1"],
-                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-                )
-                # Loop through standard radio packets but check for any new tips every second
-                for _ in range(60):
-                    if MUSIC_QUEUE:
-                        ffmpeg_process.terminate()
-                        break
-                    chunk = ffmpeg_process.stdout.read(4096)
-                    if chunk: yield chunk
-                    else: time.sleep(0.1)
+                await self.highrise.send_whisper(user.id, "❌ Access Denied. Tip 500g or more to unlock.")
 
-    return Response(generate_stream_chunks(), mimetype="audio/mpeg")
+        elif clean_msg == "!down":
+            if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
+                try:
+                    await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
+                except Exception: pass
 
-def run_highrise_client_thread():
+# =====================================================================
+# 🚀 2. LIGHTWEIGHT WEB LAYER WITH AUTO-RECOVERY PIPELINE
+# =====================================================================
+class LightHealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"status": "alive", "msg": "Web Interface Active"}')
+    def log_message(self, format, *args): return
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), LightHealthCheckHandler)
+    server.serve_forever()
+
+async def start_bot_engine():
     ROOM_ID = "6a28b5b000b6151bd4c9641e"
     API_TOKEN = "fd250294097b09a7fd05aa523c63b77ef0b980cc28f7f09742b22d0db30b53a0"
+    
     from highrise.__main__ import main, BotDefinition
     
     while True:
         try:
             bot_instance = SecurityRoomBot()
+            bot_instance.owner_username = "sadi_key"
             definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
-            asyncio.run(main(definitions=definitions))
-        except Exception as e:
-            print(f"[RECONNECTING CLIENT] Highrise engine dropped: {e}. Re-booting socket thread...")
-            time.sleep(12)
+            print("[MAIN ENGINE] Launching integrated Highrise Client...")
+            await main(definitions=definitions)
+        except Exception as engine_err:
+            print(f"[RECOVERY PIPELINE] Session dropped ({engine_err}). Retrying connection loop in 60s...")
+            await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    # 1. Fire up the Highrise Bot Web Socket inside a parallel background engine thread
-    bot_worker = threading.Thread(target=run_highrise_client_thread, daemon=True)
-    bot_worker.start()
+    web_worker = threading.Thread(target=run_health_server, daemon=True)
+    web_worker.start()
     
-    # 2. Fire up the Flask Render app service pipeline on your designated server port
-    web_server_port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=web_server_port)
+    try:
+        asyncio.run(start_bot_engine())
+    except KeyboardInterrupt:
+        print("Manual exit caught.")
