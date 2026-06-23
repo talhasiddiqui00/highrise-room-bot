@@ -1,5 +1,5 @@
 """
-Highrise Room Management Bot - Queue Tipping, Stay-Time Engine & Rich Announcements
+Highrise Room Management Bot - Queue Tipping, Stay-Time Engine & Render Logging
 Target Room ID: 6a28b5b000b6151bd4c9641e
 SDK Version: 25.1.0
 Developer: sadi_key
@@ -253,11 +253,13 @@ class SecurityRoomBot(BaseBot):
 
     # —— BACKGROUND STAY TIME ENGINE ——
     async def track_user_stay_durations_loop(self):
+        """Evaluates intervals systematically every 30 seconds for all users"""
         print("[STAY TIME ENGINE] Tracking loop activated.")
         while True:
             await asyncio.sleep(30)
             now = time.time()
             
+            # Create a copy to prevent mutation runtime errors
             for user_id, data in list(self.room_stay_tracker.items()):
                 elapsed_seconds = now - data["join_time"]
                 elapsed_minutes = elapsed_seconds / 60.0
@@ -265,6 +267,7 @@ class SecurityRoomBot(BaseBot):
                 # Milestone 1: 30 Minutes
                 if not data["hit_30m"] and elapsed_minutes >= 30.0:
                     self.room_stay_tracker[user_id]["hit_30m"] = True
+                    # Push next milestone out by 60 minutes
                     self.room_stay_tracker[user_id]["next_milestone_minutes"] = 90.0 
                     await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward"))
                     print(f"[RENDER LOG - MILESTONE] @{data['username']} reached 30 minutes stay milestone. Tipping queued.")
@@ -316,23 +319,18 @@ class SecurityRoomBot(BaseBot):
             except Exception as e:
                 print(f"[RENDER LOG - ERROR] Failed to evaluate position boundaries: {e}")
 
-    # —— RICH FORMATTED CHAT ANNOUNCEMENTS ENGINE ——
     async def start_announcement_loop(self) -> None:
-        announcements = [
-            "✨ <color=#FFD700><b>WELCOME TO OUR SPACE!</b></color> 🎉 Type <b>!help</b> to discover all available room commands! Use <b>!loop <name></b> or type <b>!stop</b> to dance! 💃🏽",
-            "👑 <color=#FF1493><b>PERMANENT VIP PRIVILEGES:</b></color> Tip the Bot <color=#00FF00><b>500g+</b></color> right now to immediately unlock lifetime VIP access & luxury floor teleports! 💎",
-            "🎁 <color=#00FFFF><b>PASSIVE GOLD REWARDS:</b></color> Stay active hanging out in our room to keep getting continuous gold tips! 🙌 (Tip the Jar to support our community! ❤️)"
-        ]
-        
         while True:
             try:
                 room_users = await self.highrise.get_room_users()
                 if room_users and hasattr(room_users, "content") and len(room_users.content) > 1:
-                    chosen_broadcast = random.choice(announcements)
-                    await self.highrise.chat(chosen_broadcast)
-                await asyncio.sleep(240)  
-            except Exception as e: 
-                print(f"[RENDER LOG - ANNOUNCEMENT ERROR] {e}")
+                    await self.highrise.chat(
+                        "✨ Welcome to our space! Type !help to discover commands. "
+                        "Want to become VIP? Tip bot 500g to become Vip and access vip lounge.DM owner or mod in case of any help "
+                        "Stay active in our room to win gold passively! 🎁"
+                    )
+                await asyncio.sleep(300)  
+            except Exception: 
                 await asyncio.sleep(10)
 
     async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
@@ -341,6 +339,7 @@ class SecurityRoomBot(BaseBot):
 
         print(f"[RENDER LOG - JOIN] User @{user.username} entered the room.")
 
+        # Start tracking their stay parameters
         self.room_stay_tracker[user.id] = {
             "username": user.username,
             "join_time": time.time(),
@@ -364,6 +363,8 @@ class SecurityRoomBot(BaseBot):
     async def on_user_leave(self, user: User) -> None:
         print(f"[RENDER LOG - LEAVE] User @{user.username} left the room.")
         await self.stop_user_emote(user.id)
+        
+        # Remove user from stay tracker to drop memory footprint and reset values
         if user.id in self.room_stay_tracker:
             del self.room_stay_tracker[user.id]
 
@@ -407,6 +408,7 @@ class SecurityRoomBot(BaseBot):
         clean_msg = message.lower().strip()
         print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
         
+        # —— USER LOOP EMOTE COMMAND ROUTINES ——
         if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
@@ -429,6 +431,7 @@ class SecurityRoomBot(BaseBot):
                 await self.stop_user_emote(user.id)
                 await self.highrise.send_whisper(user.id, "✅ Your active loops have been closed.")
 
+        # —— OWNER PRIVILEGE BLOCK ——
         if user.username.lower() == self.owner_username.lower():
             if clean_msg == "!bal":
                 try:
@@ -511,6 +514,7 @@ class SecurityRoomBot(BaseBot):
                                 await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
                 except Exception as e: print(f"[REMOVEVIP FAIL] {e}")
 
+        # —— NAVIGATION & UTILITIES ——
         if clean_msg == "!help":
             if user.username.lower() == self.owner_username.lower():
                 await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user")
@@ -535,6 +539,9 @@ class SecurityRoomBot(BaseBot):
                     await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
                 except Exception: pass
 
+# =====================================================================
+# 🚀 LIGHTWEIGHT WEB LAYER WITH AUTO-RECOVERY PIPELINE
+# =====================================================================
 class LightHealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
