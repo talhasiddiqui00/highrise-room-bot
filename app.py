@@ -479,7 +479,8 @@ class Bot(BaseBot):
         elif clean_msg.startswith("!top"):
             sorted_tippers = sorted(self.tip_data.items(), key=lambda x: x[1]['total_tips'], reverse=True)[:10]
             formatted_tippers = [f"{i + 1}. {d['username']} ({d['total_tips']}g)" for i, (_, d) in enumerate(sorted_tippers)]
-            await self.respond(user, f"Top Tippers:\n{str('\n'.join(formatted_tippers))}", source, conv_id)
+            leaderboard_text = "\n".join(formatted_tippers)
+            await self.respond(user, f"Top Tippers:\n{leaderboard_text}", source, conv_id)
 
         elif clean_msg.startswith("!get "):
             username = clean_msg.split(" ", 1)[1].replace("@", "").strip()
