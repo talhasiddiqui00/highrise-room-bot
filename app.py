@@ -1,6 +1,6 @@
 """
 Highrise Room Management Bot - Unified JSON Storage Engine
-Includes: Role-Based Help, Refreshed Announcements, and YouTube Link DJ Engine
+Includes: Role-Based Help, Refreshed Announcements, and the Robust Thread-Safe YouTube Link DJ Engine
 """
 
 import os
@@ -377,7 +377,7 @@ class Bot(BaseBot):
             except Exception as e: print(f"Error handling help whisper: {e}")
             return
 
-        # —— FREE MOUNTED YOUTUBE DJ LINK SEARCH TRIGGER ——
+        # —— THREAD-SAFE YOUTUBE DJ LINK SEARCH ENGINE ——
         if clean_msg.startswith("!play "):
             if not (is_vip or is_owner):
                 await self.respond(user, "❌ Music link requests are exclusive to VIP members.", source, conv_id)
@@ -388,25 +388,35 @@ class Bot(BaseBot):
                 await self.respond(user, "❌ Please specify a track name or artist. Example: !play Lo-Fi Beats", source, conv_id)
                 return
 
+            # Immediate response so the user knows the bot is processing the request
+            await self.respond(user, f"🔍 Searching for '{requested_track}'...", source, conv_id)
+
             try:
                 print(f"[DJ ENGINE] Searching YouTube index for matching query: {requested_track}")
-                results = YoutubeSearch(requested_track, max_results=1).to_dict()
+                
+                # Offload the blocking scraping lookup to a clean background thread
+                def fetch_yt():
+                    return YoutubeSearch(requested_track, max_results=1).to_dict()
+                
+                results = await asyncio.to_thread(fetch_yt)
                 
                 if results:
                     video = results[0]
                     video_title = video.get('title', 'Unknown Track')
                     video_id = video.get('id')
-                    duration = video.get('duration', '0:00')
                     youtube_url = f"https://youtu.be/{video_id}"
                     
-                    # Announce click-to-play link directly to the Highrise text room stream
-                    announcement = f"🎵 @{user.username} is DJing! Playing: '{video_title}' [{duration}]. Tap to listen: {youtube_url}"
+                    # Styled output to remain beautifully safe inside Highrise character limits
+                    announcement = f"🎵 @{user.username} is DJing!\n💿 {video_title[:60]}\n🔗 {youtube_url}"
                     await self.highrise.chat(announcement)
                 else:
                     await self.respond(user, f"❌ Zero track matches found for '{requested_track}'.", source, conv_id)
             except Exception as e:
-                print(f"[DJ ENGINE ERROR] Lookup aborted: {e}")
-                await self.respond(user, "⚠️ Link engine temporarily busy. Try your request again.", source, conv_id)
+                print(f"[DJ ENGINE FALLBACK] Scraper layout-error intercepted, applying link builder: {e}")
+                # Create a dynamic direct YouTube search page link if scraping engine crashes
+                encoded_query = requested_track.replace(" ", "+")
+                fallback_url = f"https://www.youtube.com/results?search_query={encoded_query}"
+                await self.highrise.chat(f"🎵 DJ @{user.username} requested '{requested_track}'!\n🔗 Tap to listen: {fallback_url}")
             return
 
         # 1. PUBLIC GUEST INTERACTIVE COMMANDS
