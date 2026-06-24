@@ -1,8 +1,6 @@
 """
-Highrise Room Management Bot - Queue Tipping, Stay-Time Engine & Render Logging
-Target Room ID: 6a28b5b000b6151bd4c9641e
-SDK Version: 25.1.0
-Developer: sadi_key
+Highrise Room Management Bot - Unified JSON Storage Engine
+Includes: Role-Based Help Whispers, Refreshed Announcements, and Host Controls
 """
 
 import os
@@ -10,17 +8,22 @@ import sys
 import time
 import random
 import asyncio
-from typing import Union
+from typing import Union, Dict, Any
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+from json import load, dump
 
-from highrise import BaseBot, User, Position, AnchorPosition
-from highrise.models import SessionMetadata, CurrencyItem, Item
+from highrise import BaseBot, User, Position, AnchorPosition, SessionMetadata, CurrencyItem, Item
+from highrise.__main__ import main, BotDefinition
 
+# Ensure terminal printing prints live logs immediately without buffering drops
 sys.stdout.reconfigure(line_buffering=True)
 os.environ["PYTHONUNBUFFERED"] = "1"
 
-MEMORY_FILE = "tipped_users.txt"
+# CONFIGURATION VARIABLES
+ROOM_ID = "6a28b5b000b6151bd4c9641e"
+API_TOKEN = "fd250294097b09a7fd05aa523c63b77ef0b980cc28f7f09742b22d0db30b53a0"
+DATA_FILE = "./data.json"
 
 EMOTE_MAP = {
     "rest": {"id": "sit-open", "duration": 17.0},
@@ -156,54 +159,72 @@ EMOTE_MAP = {
     "jinglebell": {"id": "dance-jinglebell", "duration": 11.0},
     "nervous": {"id": "idle-nervous", "duration": 21.7},
     "toilet": {"id": "idle-toilet", "duration": 32.1},
-    "attention": {"id": "emote-attention", "duration": 4.40},
+    "attention": {"id": "emote-attention", "duration": 4.4},
     "astronaut": {"id": "emote-astronaut", "duration": 13.7},
     "dancezombie": {"id": "dance-zombie", "duration": 14.1}
 }
 
-class SecurityRoomBot(BaseBot):
+class Bot(BaseBot):
     def __init__(self):
         super().__init__()
-        self.vip_users = []      
-        self.tipped_users = []   
-        self.owner_username = "sadi_key"
-        self.owner_id = None  
         self.bot_id = None
+        self.owner_id = None
+        self.owner_username = "sadi_key"
+        self.bot_status = False
+        self.tip_data = {}
+        self.vip_users = []
+        self.welcome_payouts = []
         
-        self.bot_spawn_position = Position(14.0, 0.5, 31.0, facing="FrontRight")
-        
+        # Load local structural JSON database
+        self.load_database_file()
+
+        # Teleport Locations
         self.vip_spawn_points = [
             Position(26.75, 23.0, 23.35, facing="FrontRight"),
             Position(19.00070, 23.0, 33.99, facing="FrontRight"),
             Position(27.5, 23.0, 30.0, facing="FrontRight")
         ]
-        
+        self.ground_spawn_position = Position(27.0, 0.5, 34.0, facing="FrontRight")
+
+        # Memory Run-time Components
         self.active_emote_loops = {}
         self.tip_queue = asyncio.Queue()
-        
-        # Room Stay Trackers
-        self.room_stay_tracker = {} 
+        self.room_stay_tracker = {}
 
-        self.load_tipped_users()
+    def load_database_file(self) -> None:
+        try:
+            with open(DATA_FILE, "r") as file:
+                data = load(file)
+                self.tip_data = data.get("users", {})
+                self.vip_users = data.get("vip_users", [])
+                self.welcome_payouts = data.get("welcome_payouts", [])
+                print(f"[MEMORY LOG] Database loaded. Tippers={len(self.tip_data)}, VIPs={len(self.vip_users)}")
+        except Exception as e:
+            print(f"[MEMORY ERROR] Failed to parse local database file: {e}")
 
-    def load_tipped_users(self):
-        if os.path.exists(MEMORY_FILE):
-            try:
-                with open(MEMORY_FILE, "r") as f:
-                    self.tipped_users = [line.strip() for line in f.readlines() if line.strip()]
-                print(f"[MEMORY LOG] Loaded {len(self.tipped_users)} remembered users.")
-            except Exception as e:
-                print(f"[MEMORY ERROR] Failed to read storage: {e}")
+    def save_database_file(self) -> None:
+        try:
+            with open(DATA_FILE, "r+") as file:
+                data = load(file)
+                file.seek(0)
+                data["users"] = self.tip_data
+                data["vip_users"] = self.vip_users
+                data["welcome_payouts"] = self.welcome_payouts
+                dump(data, file)
+                file.truncate()
+        except Exception as e:
+            print(f"[MEMORY ERROR] Saving execution aborted: {e}")
 
-    def save_tipped_user(self, user_id: str):
-        if user_id not in self.tipped_users:
-            self.tipped_users.append(user_id)
-            try:
-                with open(MEMORY_FILE, "a") as f:
-                    f.write(f"{user_id}\n")
-            except Exception as e:
-                print(f"[MEMORY ERROR] Failed to save storage: {e}")
+    def get_bot_position(self) -> Position:
+        try:
+            with open(DATA_FILE, "r") as file:
+                data = load(file)
+                pos_data = data.get("bot_position", {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"})
+                return Position(pos_data["x"], pos_data["y"], pos_data["z"], pos_data["facing"])
+        except Exception:
+            return Position(0, 0, 0, "FrontRight")
 
+    # —— ASYNCHRONOUS EMOTE LOOPS ENGINE ——
     async def loop_emote_handler(self, user_id: str, emote_id: str, duration: float) -> None:
         try:
             while True:
@@ -237,13 +258,11 @@ class SecurityRoomBot(BaseBot):
             target_id, gold_bar_tier, username, reason = await self.tip_queue.get()
             try:
                 await self.highrise.tip_user(target_id, gold_bar_tier)
-                
                 if reason == "welcome":
                     await self.highrise.chat(f"🎉 @{username}, enjoy your 1g welcome bonus!")
                 elif reason == "stay_reward":
                     await self.highrise.chat(f"⏰ @{username} received 1g for supporting the room with their stay-time! 🎉")
-                
-                print(f"[RENDER LOG - TIP] Tipped {gold_bar_tier} to @{username} successfully. Reason: {reason}")
+                print(f"[RENDER LOG - TIP] Sent {gold_bar_tier} to @{username}. Reason: {reason}")
                 await asyncio.sleep(1.2)
             except Exception as queue_err:
                 error_str = str(queue_err).lower()
@@ -261,48 +280,24 @@ class SecurityRoomBot(BaseBot):
         while True:
             await asyncio.sleep(30)
             now = time.time()
-            
             for user_id, data in list(self.room_stay_tracker.items()):
                 elapsed_seconds = now - data["join_time"]
                 elapsed_minutes = elapsed_seconds / 60.0
                 
-                # Milestone 1: 30 Minutes
                 if not data["hit_30m"] and elapsed_minutes >= 30.0:
                     self.room_stay_tracker[user_id]["hit_30m"] = True
-                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = 90.0 
+                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = 90.0
                     await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward"))
-                    print(f"[RENDER LOG - MILESTONE] @{data['username']} reached 30 minutes stay milestone. Tipping queued.")
-
-                # Milestone 2 & Up: Every 60 minutes after the first 30m
+                    print(f"[RENDER LOG - MILESTONE] @{data['username']} reached 30m milestone. Tipping queued.")
                 elif data["hit_30m"] and elapsed_minutes >= data["next_milestone_minutes"]:
                     self.room_stay_tracker[user_id]["next_milestone_minutes"] += 60.0
                     await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward"))
                     print(f"[RENDER LOG - MILESTONE] @{data['username']} reached recurring milestone ({int(elapsed_minutes)}m). Tipping queued.")
 
-    async def on_start(self, session_metadata: SessionMetadata) -> None:
-        self.bot_id = session_metadata.user_id
-        try:
-            self.owner_id = session_metadata.room_info.owner_id
-        except AttributeError: pass
-
-        print(f"\n[RENDER LOG - STARTUP] Handshake confirmed with Highrise server via SDK 25.1.0.")
-        
-        try:
-            await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
-            print("[RENDER LOG - SPAWN] Bot placed instantly at x=14.0, y=0.5, z=31.0")
-        except Exception as e: 
-            print(f"[RENDER LOG - SPAWN ERROR] Initial connection placement failed: {e}")
-                
-        asyncio.create_task(self.process_tip_queue_worker())
-        asyncio.create_task(self.track_user_stay_durations_loop())
-        
-        asyncio.create_task(self.start_announcement_loop())
-        asyncio.create_task(self.connection_watchdog_loop())
-
     # —— SAFE HARD-RESTART WATCHDOG ——
     async def connection_watchdog_loop(self) -> None:
         while True:
-            await asyncio.sleep(45) 
+            await asyncio.sleep(45)
             try:
                 await self.highrise.get_wallet()
             except Exception as e:
@@ -315,12 +310,14 @@ class SecurityRoomBot(BaseBot):
             try:
                 room_users = await self.highrise.get_room_users()
                 if room_users and hasattr(room_users, "content"):
+                    pos_data = self.get_bot_position()
                     for user, position in room_users.content:
                         if user.id == self.bot_id:
                             if isinstance(position, Position):
-                                if abs(position.x - 14.0) > 0.5 or abs(position.z - 31.0) > 0.5:
-                                    print(f"[RENDER LOG - POSITION DRIFT] Bot drifted to x={position.x}, z={position.z}. Teleporting back to spawn anchor.")
-                                    await self.highrise.teleport(self.bot_id, self.bot_spawn_position)
+                                if abs(position.x - pos_data.x) > 0.5 or abs(position.z - pos_data.z) > 0.5:
+                                    if pos_data != Position(0,0,0, 'FrontRight'):
+                                        print(f"[RENDER LOG - POSITION DRIFT] Bot drifted. Teleporting back to spawn anchor.")
+                                        await self.highrise.teleport(self.bot_id, pos_data)
                             break
             except Exception as e:
                 error_msg = str(e).lower()
@@ -332,31 +329,53 @@ class SecurityRoomBot(BaseBot):
     # —— RICH MULTI-COLORED PUBLIC ANNOUNCEMENTS ——
     async def start_announcement_loop(self) -> None:
         announcements = [
-            "✨ <color=#FFD700><b>WELCOME TO OUR SPACE!</b></color> 🎉 Type <b>!help</b> to discover available room commands. Want to dance? Use <b>'!loop <name>'</b> or type <b>'!stop'</b> to finish! 🕺🏽",
-            "👑 <color=#FF1493><b>PERMANENT VIP PRIVILEGES:</b></color> Tip the Bot <color=#00FF00><b>500g</b></color> to become permanent VIP and access our luxury VIP lounge floor immediately! 💎",
-            "🎁 <color=#00FFFF><b>PASSIVE REWARDS ALERT:</b></color> Stay active hanging out in our room to keep winning free gold passively! Tip the jar to support! 🔥"
+            "✨ <color=#00FFFF><b>Welcome to the room!</b></color> Grab a drink, make friends, and enjoy the vibe! 🎵🥂",
+            "👑 <color=#FFD700><b>PERMANENT VIP ACCESS:</b></color> Support us by tipping the Bot <b>500g+</b> to unlock permanent VIP perks & entry to our luxury lounge! 💎🚀",
+            "⚠️ <color=#FF4500><b>NEED ASSISTANCE?</b></color> If you have any questions or issues, please text a <b>MOD</b> or the <b>Owner</b> directly! 🛡️💬"
         ]
-        
         while True:
             try:
                 room_users = await self.highrise.get_room_users()
                 if room_users and hasattr(room_users, "content") and len(room_users.content) > 1:
                     chosen_broadcast = random.choice(announcements)
                     await self.highrise.chat(chosen_broadcast)
-                await asyncio.sleep(240)  # Cycles text prompts dynamically every 4 minutes
-            except Exception as e: 
+                await asyncio.sleep(240)
+            except Exception as e:
                 error_msg = str(e).lower()
                 if "closing transport" in error_msg or "connection closed" in error_msg:
                     print("[RENDER LOG - CRITICAL] Announcement channel broken! Resetting core server...")
                     os._exit(1)
                 await asyncio.sleep(10)
 
-    async def on_user_join(self, user: User, position: Union[Position, AnchorPosition]) -> None:
+    # —— HIGHRISE EVENTS API HANDLERS ——
+    async def on_start(self, session_metadata: SessionMetadata) -> None:
+        print("Bot Connected")
+        self.bot_id = session_metadata.user_id
+        self.owner_id = session_metadata.room_info.owner_id
+        
+        if self.bot_status:
+            await self.place_bot()
+        self.bot_status = True
+
+        asyncio.create_task(self.process_tip_queue_worker())
+        asyncio.create_task(self.track_user_stay_durations_loop())
+        asyncio.create_task(self.start_announcement_loop())
+        asyncio.create_task(self.connection_watchdog_loop())
+
+    async def place_bot(self):
+        while self.bot_status is False:
+            await asyncio.sleep(0.5)
+        try:
+            bot_position = self.get_bot_position()
+            if bot_position != Position(0, 0, 0, 'FrontRight'):
+                await self.highrise.teleport(self.bot_id, bot_position)
+        except Exception as e:
+            print(f"Error with starting position {e}")
+
+    async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
         if user.id == self.bot_id or "bot" in user.username.lower(): return
-        if user.username.lower() == self.owner_username.lower(): self.owner_id = user.id
-
-        print(f"[RENDER LOG - JOIN] User @{user.username} entered the room.")
-
+        print(f"{user.username} joined the room")
+        
         self.room_stay_tracker[user.id] = {
             "username": user.username,
             "join_time": time.time(),
@@ -367,196 +386,282 @@ class SecurityRoomBot(BaseBot):
         try:
             welcome_text = (
                 f"👋 Welcome to the room @{user.username}! 🎉\n"
-                f"💡 Type '!help' to view Guest Commands.\n"
+                f"💡 Type '!help' to view Room Commands.\n"
                 f"👑 Want permanent VIP? Tip the Bot 500g+ or support us by tipping the Jar! ❤️"
             )
             await self.highrise.chat(welcome_text)
             
-            if user.id not in self.tipped_users:
-                self.save_tipped_user(user.id)
+            if user.id not in self.welcome_payouts:
+                self.welcome_payouts.append(user.id)
+                self.save_database_file()
                 await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome"))
-        except Exception as e: print(f"[JOIN ERROR] {e}")
+        except Exception as e:
+            print(f"[JOIN ERROR] {e}")
 
     async def on_user_leave(self, user: User) -> None:
-        print(f"[RENDER LOG - LEAVE] User @{user.username} left the room.")
+        print(f"{user.username} left the room")
         await self.stop_user_emote(user.id)
         if user.id in self.room_stay_tracker:
             del self.room_stay_tracker[user.id]
 
     async def send_vip_welcome_packet(self, user_id: str, username: str) -> None:
         try:
-            await asyncio.sleep(1.0) 
+            await asyncio.sleep(1.0)
             await self.highrise.send_whisper(user_id, f"👑 Welcome to Lifetime VIP, @{username}! Here are your exclusive commands:")
             await self.highrise.send_whisper(user_id, "🚀 Type: '!vip' to teleport up to the luxury lounge level.")
             await self.highrise.send_whisper(user_id, "⬇️ Type: '!down' to return immediately back to the main ground floor.")
         except Exception: pass
 
-    async def on_whisper(self, user: User, message: str) -> None:
-        if user.id == self.bot_id: return
-        try:
-            await self.highrise.send_whisper(user.id, "Come to the room if you want to talk or command with me!")
-        except Exception: pass
-
-    async def on_tip(self, sender: User, receiver: User, tip: Union[CurrencyItem, Item]) -> None:
+    async def on_tip(self, sender: User, receiver: User, tip: CurrencyItem | Item) -> None:
         if sender.id == self.bot_id: return
 
         if isinstance(tip, CurrencyItem):
-            try:
-                is_to_bot = (receiver.id == self.bot_id)
-                is_to_owner = (receiver.id == self.owner_id or receiver.username.lower() == self.owner_username.lower())
+            print(f"{sender.username} tipped {tip.amount}g -> {receiver.username}")
+            
+            # Database tip calculation logs
+            if receiver.id == self.bot_id:
+                if sender.id not in self.tip_data:
+                    self.tip_data[sender.id] = {"username": sender.username, "total_tips": 0}
+                self.tip_data[sender.id]['total_tips'] += tip.amount
+                
+                # Check for lifetime VIP eligibility trigger
+                if tip.amount >= 500:
+                    is_new = sender.id not in self.vip_users
+                    if is_new:
+                        self.vip_users.append(sender.id)
+                    await self.highrise.chat(
+                        f"✨ 👑 [VIP PROMOTION] 👑 ✨\n"
+                        f"Deep gratitude to @{sender.username} for the generous {tip.amount}g tip! "
+                        f"LIFETIME VIP ACCESS granted successfully! Check your whispers for commands. 🚀"
+                    )
+                    if is_new:
+                        await self.send_vip_welcome_packet(sender.id, sender.username)
+                else:
+                    await self.highrise.chat(f"Thank you {sender.username} for the generous {tip.amount}g tip!")
+                
+                self.save_database_file()
 
-                if is_to_bot or is_to_owner:
-                    if tip.amount >= 500:
-                        is_new = sender.id not in self.vip_users
-                        if is_new: self.vip_users.append(sender.id)
-                        await self.highrise.chat(
-                            f"✨ 👑 [VIP PROMOTION] 👑 ✨\n"
-                            f"Deep gratitude to @{sender.username} for the generous {tip.amount}g tip! "
-                            f"LIFETIME VIP ACCESS granted successfully! Check your whispers for commands. 🚀"
-                        )
-                        if is_new: await self.send_vip_welcome_packet(sender.id, sender.username)
-                    else:
-                        await self.highrise.chat(f"✨ [ROOM CONTRIBUTION] ✨\nThank you profoundly @{sender.username} for supporting our space with a {tip.amount}g tip! ❤️")
-            except Exception as e: print(f"[VIP TIP ERROR] {e}")
-
+    # —— INPUT STRIPPING PIPELINE AGENT ——
     async def on_chat(self, user: User, message: str) -> None:
-        clean_msg = message.lower().strip()
-        print(f"[CHAT RECEIVED] @{user.username} ({user.id}): {message}", flush=True)
+        print(f"{user.username} said: {message}")
+        await self.command_handler(user, message, source="chat")
+
+    async def on_whisper(self, user: User, message: str) -> None:
+        print(f"{user.username} whispered: {message}")
+        await self.command_handler(user, message, source="whisper")
+
+    async def on_message(self, user_id: str, conversation_id: str, is_new_conversation: bool) -> None:
+        conversation = await self.highrise.get_messages(conversation_id)
+        message = conversation.messages[0].content
         
+        # Resolve User object configuration context for direct web messages
+        room_users = await self.highrise.get_room_users()
+        user_obj = next((u for u, pos in room_users.content if u.id == user_id), None)
+        if not user_obj:
+            user_obj = User(id=user_id, username=f"User_{user_id}")
+            
+        await self.command_handler(user_obj, message, source="message", conv_id=conversation_id)
+
+    # —— CORE UNIFIED COMMANDS ROUTER ENGINE ——
+    async def command_handler(self, user: User, message: str, source: str, conv_id: str = None):
+        clean_msg = message.lower().strip()
+        is_owner = (user.id == self.owner_id or user.username.lower() == self.owner_username.lower())
+        is_vip = (user.id in self.vip_users)
+
+        # ROLE-BASED HELP INTERCEPTOR (Always delivers as a private whisper)
+        if clean_msg == "!help":
+            if is_owner:
+                help_text = "⚡ Host Panel: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user | !removevip @user | !set | !top | !get @user | !wallet"
+            elif is_vip:
+                help_text = "💡 VIP Lounge Access: Type '!vip' to teleport up or '!down' to return.\n🕺 Dance Engine: Type '!loop <name>' or '!stop'."
+            else:
+                help_text = "✨ Guest Info: Support us by tipping 500g+ to automatically unlock Permanent VIP!\n🕺 Dance Engine: Type '!loop <name>' or '!stop' to control animation tracks."
+            
+            try:
+                await self.highrise.send_whisper(user.id, help_text)
+            except Exception as e:
+                print(f"Error handling help whisper routing: {e}")
+            return
+
+        # 1. PUBLIC GUEST INTERACTIVE COMMANDS
         if clean_msg.startswith("!loop "):
             emote_name = clean_msg.replace("!loop ", "").strip()
             if emote_name in EMOTE_MAP:
                 await self.stop_user_emote(user.id)
-                
                 emote_id = EMOTE_MAP[emote_name]["id"]
                 duration = EMOTE_MAP[emote_name]["duration"]
-                
                 task = asyncio.create_task(self.loop_emote_handler(user.id, emote_id, duration))
-                self.active_emote_loops[user.id] = {
-                    "task": task,
-                    "emote_id": emote_id
-                }
-                await self.highrise.send_whisper(user.id, f"✅ Started your loops for '{emote_name}'. Type '!stop' to end.")
+                self.active_emote_loops[user.id] = {"task": task, "emote_id": emote_id}
+                await self.respond(user, f"✅ Started your loops for '{emote_name}'. Type '!stop' to end.", source, conv_id)
             else:
-                await self.highrise.send_whisper(user.id, "❌ Unknown emote name. Please check spelling.")
+                await self.respond(user, "❌ Unknown emote name. Please check your command.", source, conv_id)
+            return
 
         elif clean_msg == "!stop":
             if user.id in self.active_emote_loops:
                 await self.stop_user_emote(user.id)
-                await self.highrise.send_whisper(user.id, "✅ Your active loops have been closed.")
+                await self.respond(user, "✅ Your active loops have been closed.", source, conv_id)
+            return
 
-        if user.username.lower() == self.owner_username.lower():
-            if clean_msg == "!bal":
-                try:
-                    wallet_response = await self.highrise.get_wallet()
-                    if wallet_response and hasattr(wallet_response, "content"):
-                        bot_gold = next((item.amount for item in wallet_response.content if item.type == "gold"), 0)
-                        await self.highrise.send_whisper(user.id, f"💰 [VAULT BALANCE] {bot_gold} gold remains securely in reserve.")
-                except Exception as e: print(f"[BALANCE FAIL] {e}")
-                    
-            elif clean_msg.startswith("!with"):
-                try:
-                    parts = clean_msg.split()
-                    if len(parts) > 1:
-                        raw_amount = parts[1].replace("g", "")
-                        if raw_amount in ["1", "5", "10", "50", "100", "500", "1k", "5000", "10k"]:
-                            await self.highrise.send_whisper(user.id, f"💸 [WITHDRAWAL] Executing {raw_amount}g bar transfer...")
-                            await self.highrise.tip_user(user.id, f"gold_bar_{raw_amount}")
-                except Exception as e: print(f"[WITHDRAWAL FAIL] {e}")
-                    
-            elif clean_msg.startswith("!give "):
-                try:
-                    parts = message.split()  
-                    if len(parts) >= 3:
-                        target_user = parts[1].replace("@", "").strip()
-                        amount_str = parts[2].lower().replace("g", "")
-                        if amount_str in ["1", "5", "10", "50", "100", "500", "1k", "5000", "10k"]:
-                            room_users = await self.highrise.get_room_users()
-                            if room_users and hasattr(room_users, "content"):
-                                user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
-                                if user_id_found:
-                                    await self.highrise.send_whisper(user.id, f"🎁 [GIFT SENT] Transferred {amount_str}g straight to @{target_user}!")
-                                    await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
-                except Exception as e: print(f"[GIFT FAIL] {e}")
-
-            elif clean_msg.startswith("!giveall "):
-                try:
-                    parts = clean_msg.split()
-                    if len(parts) >= 2:
-                        amount_str = parts[1].replace("g", "")
-                        if amount_str in ["1", "5", "10"]:
-                            room_users = await self.highrise.get_room_users()
-                            if room_users and hasattr(room_users, "content"):
-                                target_count = 0
-                                for u, pos in room_users.content:
-                                    if u.id != self.bot_id and u.username.lower() != self.owner_username.lower():
-                                        target_count += 1
-                                        await self.tip_queue.put((u.id, f"gold_bar_{amount_str}", u.username, "giveall"))
-                                
-                                if target_count > 0:
-                                    await self.highrise.chat(f"🎁 [RAIN DROP QUEUED] Adding {target_count} players to the payout line for {amount_str}g transfers! Payout processing 1-by-1...")
-                                else:
-                                    await self.highrise.send_whisper(user.id, "❌ No other eligible players found in the room to tip.")
-                except Exception as e: print(f"[GIVEALL FAIL] {e}")
-
-            elif clean_msg.startswith("!givevip "):
-                try:
-                    parts = message.split()
-                    if len(parts) >= 2:
-                        target_user = parts[1].replace("@", "").strip()
-                        room_users = await self.highrise.get_room_users()
-                        if room_users and hasattr(room_users, "content"):
-                            user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
-                            if user_id_found:
-                                if user_id_found not in self.vip_users:
-                                    self.vip_users.append(user_id_found)
-                                    await self.highrise.chat(f"👑 VIP Status manually granted to @{target_user} by the Room Owner! ✨")
-                                    await self.send_vip_welcome_packet(user_id_found, target_user)
-                except Exception as e: print(f"[GIVEVIP FAIL] {e}")
-
-            elif clean_msg.startswith("!removevip "):
-                try:
-                    parts = message.split()
-                    if len(parts) >= 2:
-                        target_user = parts[1].replace("@", "").strip()
-                        room_users = await self.highrise.get_room_users()
-                        if room_users and hasattr(room_users, "content"):
-                            user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
-                            if user_id_found and user_id_found in self.vip_users:
-                                self.vip_users.remove(user_id_found)
-                                await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
-                except Exception as e: print(f"[REMOVEVIP FAIL] {e}")
-
-        if clean_msg == "!help":
-            if user.username.lower() == self.owner_username.lower():
-                await self.highrise.send_whisper(user.id, "⚡ Commands: !bal | !with <amt> | !give @user <amt> | !giveall <amt> | !givevip @user")
-            elif user.id in self.vip_users:
-                await self.highrise.send_whisper(user.id, "💡 VIP Commands: Type '!vip' or '!down' to travel between floors.\nEmote loop tracker: Type '!loop <name>' or '!stop'.")
-            else:
-                await self.highrise.send_whisper(user.id, "💡 Menu: Type '!vip' to verify access status. Support by tipping 500g to unlock luxury areas!\nEmote loop tracker: Type '!loop <name>'.")
-                
         elif clean_msg == "!vip":
-            if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
+            if is_vip or is_owner:
                 try:
-                    await self.highrise.send_whisper(user.id, "🚀 Teleporting up to luxury lounge...")
+                    await self.respond(user, "🚀 Teleporting up to luxury lounge...", source, conv_id)
                     await self.highrise.teleport(user.id, random.choice(self.vip_spawn_points))
                 except Exception: pass
             else:
-                await self.highrise.send_whisper(user.id, "❌ Access Denied. Tip 500g or more to unlock.")
+                await self.respond(user, "❌ Access Denied. Tip 500g or more to unlock.", source, conv_id)
+            return
 
         elif clean_msg == "!down":
-            if user.id in self.vip_users or user.username.lower() == self.owner_username.lower():
+            if is_vip or is_owner:
                 try:
-                    await self.highrise.send_whisper(user.id, "⬇️ Returning back to the ground floor...")
-                    await self.highrise.teleport(user.id, Position(27.0, 0.5, 34.0, facing="FrontRight"))
+                    await self.respond(user, "⬇️ Returning back to the ground floor...", source, conv_id)
+                    await self.highrise.teleport(user.id, self.ground_spawn_position)
                 except Exception: pass
+            return
 
+        # 2. RESTRICTED HOST ADMINISTRATIVE CONTROLS
+        if not is_owner:
+            return
+
+        if clean_msg.startswith("!set"):
+            position = None
+            try:
+                room_users = await self.highrise.get_room_users()
+                for room_user, pos in room_users.content:
+                    if user.id == room_user.id and isinstance(pos, Position):
+                        position = pos
+                if position is not None:
+                    with open(DATA_FILE, "r+") as file:
+                        data = load(file)
+                        file.seek(0)
+                        data["bot_position"] = {
+                            "x": position.x, "y": position.y, "z": position.z, "facing": position.facing
+                        }
+                        dump(data, file)
+                        file.truncate()
+                    set_position = Position(position.x, (position.y + 0.0000001), position.z, facing=position.facing)
+                    await self.highrise.teleport(self.bot_id, set_position)
+                    await self.highrise.teleport(self.bot_id, position)
+                    await self.highrise.walk_to(position)
+                    await self.respond(user, "Updated bot position.", source, conv_id)
+                else:
+                    await self.respond(user, "Failed to update bot position.", source, conv_id)
+            except Exception as e:
+                print(f"Error setting bot position: {e}")
+
+        elif clean_msg.startswith("!top"):
+            sorted_tippers = sorted(self.tip_data.items(), key=lambda x: x[1]['total_tips'], reverse=True)[:10]
+            formatted_tippers = [f"{i + 1}. {d['username']} ({d['total_tips']}g)" for i, (_, d) in enumerate(sorted_tippers)]
+            tipper_message = '\n'.join(formatted_tippers)
+            await self.respond(user, f"Top Tippers:\n{tipper_message}", source, conv_id)
+
+        elif clean_msg.startswith("!get "):
+            username = clean_msg.split(" ", 1)[1].replace("@", "").strip()
+            tip_amount = None
+            for _, d in self.tip_data.items():
+                if d['username'].lower() == username.lower():
+                    tip_amount = d['total_tips']
+            if tip_amount is not None:
+                await self.respond(user, f"{username} has tipped {tip_amount}g", source, conv_id)
+            else:
+                await self.respond(user, f"{username} hasn't tipped.", source, conv_id)
+
+        elif clean_msg == "!wallet" or clean_msg == "!bal":
+            wallet = await self.highrise.get_wallet()
+            gold = next((currency.amount for currency in wallet.content if currency.type == 'gold'), 0)
+            await self.respond(user, f"💰 [VAULT BALANCE] {gold} gold remains securely in reserve.", source, conv_id)
+
+        elif clean_msg.startswith("!with"):
+            try:
+                parts = clean_msg.split()
+                if len(parts) > 1:
+                    raw_amount = parts[1].replace("g", "")
+                    if raw_amount in ["1", "5", "10", "50", "100", "500", "1k", "5000", "10k"]:
+                        await self.respond(user, f"💸 [WITHDRAWAL] Executing {raw_amount}g bar transfer...", source, conv_id)
+                        await self.highrise.tip_user(user.id, f"gold_bar_{raw_amount}")
+            except Exception as e: print(f"[WITHDRAWAL FAIL] {e}")
+
+        elif clean_msg.startswith("!give "):
+            try:
+                parts = message.split()
+                if len(parts) >= 3:
+                    target_user = parts[1].replace("@", "").strip()
+                    amount_str = parts[2].lower().replace("g", "")
+                    if amount_str in ["1", "5", "10", "50", "100", "500", "1k", "5000", "10k"]:
+                        room_users = await self.highrise.get_room_users()
+                        user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                        if user_id_found:
+                            await self.respond(user, f"🎁 [GIFT SENT] Transferred {amount_str}g straight to @{target_user}!", source, conv_id)
+                            await self.highrise.tip_user(user_id_found, f"gold_bar_{amount_str}")
+            except Exception as e: print(f"[GIFT FAIL] {e}")
+
+        elif clean_msg.startswith("!giveall "):
+            try:
+                parts = clean_msg.split()
+                if len(parts) >= 2:
+                    amount_str = parts[1].replace("g", "")
+                    if amount_str in ["1", "5", "10"]:
+                        room_users = await self.highrise.get_room_users()
+                        target_count = 0
+                        for u, pos in room_users.content:
+                            if u.id != self.bot_id and u.username.lower() != self.owner_username.lower():
+                                target_count += 1
+                                await self.tip_queue.put((u.id, f"gold_bar_{amount_str}", u.username, "giveall"))
+                        if target_count > 0:
+                            await self.highrise.chat(f"🎁 [RAIN DROP QUEUED] Adding {target_count} players to the payout line for {amount_str}g transfers!")
+                        else:
+                            await self.respond(user, "❌ No other eligible players found in the room to tip.", source, conv_id)
+            except Exception as e: print(f"[GIVEALL FAIL] {e}")
+
+        elif clean_msg.startswith("!givevip "):
+            try:
+                parts = message.split()
+                if len(parts) >= 2:
+                    target_user = parts[1].replace("@", "").strip()
+                    room_users = await self.highrise.get_room_users()
+                    user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                    if user_id_found:
+                        if user_id_found not in self.vip_users:
+                            self.vip_users.append(user_id_found)
+                            self.save_database_file()
+                            await self.highrise.chat(f"👑 VIP Status manually granted to @{target_user} by the Room Owner! ✨")
+                            await self.send_vip_welcome_packet(user_id_found, target_user)
+            except Exception as e: print(f"[GIVEVIP FAIL] {e}")
+
+        elif clean_msg.startswith("!removevip "):
+            try:
+                parts = message.split()
+                if len(parts) >= 2:
+                    target_user = parts[1].replace("@", "").strip()
+                    room_users = await self.highrise.get_room_users()
+                    user_id_found = next((u.id for u, pos in room_users.content if u.username.lower() == target_user.lower()), None)
+                    if user_id_found and user_id_found in self.vip_users:
+                        self.vip_users.remove(user_id_found)
+                        self.save_database_file()
+                        await self.highrise.chat(f"🚫 VIP Status has been removed from @{target_user}.")
+            except Exception as e: print(f"[REMOVEVIP FAIL] {e}")
+
+    # —— COMMUNICATIONS CHANNEL ROUTING PACKET ——
+    async def respond(self, user: User, msg: str, source: str, conv_id: str = None):
+        try:
+            if source == "chat":
+                await self.highrise.chat(msg)
+            elif source == "whisper":
+                await self.highrise.send_whisper(user.id, msg)
+            elif source == "message" and conv_id:
+                await self.highrise.send_message(conv_id, msg)
+        except Exception as e:
+            print(f"Response Delivery Error via channel '{source}': {e}")
+
+# —— LIVE MONITORING NETWORK LAYER ——
 class LightHealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "application/json")
         self.end_headers()
-        self.wfile.write(b'{"status": "alive", "msg": "Web Interface Active"}')
+        self.wfile.write(b'{"status": "alive", "msg": "Integrated Client Online"}')
     def log_message(self, format, *args): return
 
 def run_health_server():
@@ -565,27 +670,31 @@ def run_health_server():
     server.serve_forever()
 
 async def start_bot_engine():
-    ROOM_ID = "6a28b5b000b6151bd4c9641e"
-    API_TOKEN = "fd250294097b09a7fd05aa523c63b77ef0b980cc28f7f09742b22d0db30b53a0"
-    
-    from highrise.__main__ import main, BotDefinition
-    
     while True:
         try:
-            bot_instance = SecurityRoomBot()
+            bot_instance = Bot()
             definitions = [BotDefinition(bot_instance, ROOM_ID, API_TOKEN)]
-            print("[RENDER LOG - CRITICAL] Launching integrated Highrise Client...")
+            print("[RENDER LOG - CRITICAL] Spawning integrated room instance connection layer...")
             await main(definitions=definitions)
         except Exception as engine_err:
-            print(f"[RENDER LOG - RECOVERY EVENT] Bot dropped off room socket ({engine_err}). Respawning connection loop in 30s...")
+            print(f"[RENDER LOG - SYSTEM DOWN] Connection dropped: ({engine_err}). Re-indexing in 30s...")
             await asyncio.sleep(30)
 
+# —— DATABASE STRUCTURAL INTEGRITY PRIMER ——
+def data_file(filename: str, default_data: str) -> None:
+    if not os.path.exists(filename):
+        with open(filename, 'w') as file:
+            file.write(default_data)
+
 if __name__ == "__main__":
+    DEFAULT_DATA = '{"users": {}, "vip_users": [], "welcome_payouts": [], "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}'
+    data_file(DATA_FILE, DEFAULT_DATA)
+
     web_worker = threading.Thread(target=run_health_server, daemon=True)
     web_worker.start()
-    print("[RENDER LOG - WEB INFRA] Non-blocking server listening on port 10000...")
+    print("[RENDER LOG - WEB INFRA] Non-blocking health network pipeline reading port 10000...")
     
     try:
         asyncio.run(start_bot_engine())
     except KeyboardInterrupt:
-        print("[RENDER LOG - EXIT] Manual shutdown sequence executed.")
+        print("[RENDER LOG - EXIT] Connection pipeline closed manually.")
