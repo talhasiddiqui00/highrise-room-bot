@@ -23,6 +23,12 @@ ROOM_ID = "6a28b5b000b6151bd4c9641e"
 API_TOKEN = "fd250294097b09a7fd05aa523c63b77ef0b980cc28f7f09742b22d0db30b53a0"
 DATA_FILE = "./data.json"
 
+TIP_MAP = {
+    "1g": "gold_bar_1", "5g": "gold_bar_5", "10g": "gold_bar_10", 
+    "50g": "gold_bar_50", "100g": "gold_bar_100", "500g": "gold_bar_500",
+    "1k": "gold_bar_1k", "5k": "gold_bar_5k", "10k": "gold_bar_10k"
+}
+
 EMOTE_MAP = {
     "rest": {"id": "sit-open", "duration": 17.0}, "zombie": {"id": "idle_zombie", "duration": 28.0},
     "relaxed": {"id": "idle_layingdown2", "duration": 21.0}, "attentive": {"id": "idle_layingdown", "duration": 24.0},
@@ -221,6 +227,9 @@ class Bot(BaseBot):
                     await self.highrise.chat(f"🎉 @{username}, enjoy your 1g welcome bonus!")
                 elif reason == "stay_reward":
                     await self.highrise.chat(f"⏰ @{username} received 1g for supporting the room with their stay-time! 🎉")
+                elif reason == "manual_tip":
+                    # For !give and !giveall commands, wait quietly so it doesn't spam
+                    pass
                 await asyncio.sleep(1.2)
             except Exception as e:
                 if "closing transport" in str(e).lower():
@@ -263,7 +272,6 @@ class Bot(BaseBot):
                 room_users = await self.highrise.get_room_users()
                 if room_users and len(room_users.content) > 1:
                     await self.highrise.chat(random.choice(announcements))
-                # Interval set to 60 seconds
                 await asyncio.sleep(60)
             except Exception:
                 await asyncio.sleep(10)
@@ -331,7 +339,7 @@ class Bot(BaseBot):
         is_owner = (user.username.lower() == self.owner_username.lower())
         is_vip = (user.id in self.vip_users)
 
-        # 1. Handle Emote Triggering (Directly typing name without spaces)
+        # 1. Handle Emote Triggering
         normalized_msg = clean_msg.replace(" ", "")
         if normalized_msg in EMOTE_MAP:
             await self.stop_user_emote(user.id)
@@ -344,12 +352,11 @@ class Bot(BaseBot):
         if clean_msg == "!help":
             help_text = "⚡ Commands: !list | !stop | !vip | !down"
             if is_owner:
-                help_text += " | !set | !top | !bal"
+                help_text += " | !set | !top | !bal | !giveall | !give | !givevip | !removevip"
             await self.respond(user, help_text, source)
             return
 
         elif clean_msg == "!list":
-            # Whisper instructions and emotes in chunks to prevent spamming
             await self.highrise.send_whisper(user.id, "💡 Just type any of these names in chat to loop the emote! Type '!stop' to cancel.")
             emotes = list(EMOTE_MAP.keys())
             current_msg = ""
@@ -381,11 +388,75 @@ class Bot(BaseBot):
                 pass
             return
 
+        # --- EVERYTHING BELOW THIS LINE IS OWNER ONLY ---
         if not is_owner:
             return
 
-        # 3. Owner Only Commands
-        if clean_msg == "!set":
+        # 3. Owner Economy/Tipping Commands
+        if clean_msg.startswith("!giveall "):
+            amount_str = clean_msg.split(" ")[1].strip()
+            if amount_str in TIP_MAP:
+                room_users = await self.highrise.get_room_users()
+                count = 0
+                for u, _ in room_users.content:
+                    if u.id != self.bot_id:
+                        await self.tip_queue.put((u.id, TIP_MAP[amount_str], u.username, "manual_tip"))
+                        count += 1
+                await self.respond(user, f"💸 Queued {amount_str} tip to {count} users in the room!", source)
+            else:
+                await self.respond(user, "❌ Invalid amount. Use 1g, 5g, 10g, 50g, 100g, 500g, 1k, 5k, or 10k.", source)
+            return
+
+        elif clean_msg.startswith("!give @"):
+            parts = clean_msg.split()
+            if len(parts) >= 3:
+                target_name = parts[1].replace("@", "")
+                amount_str = parts[2]
+                if amount_str in TIP_MAP:
+                    room_users = await self.highrise.get_room_users()
+                    for u, _ in room_users.content:
+                        if u.username.lower() == target_name:
+                            await self.tip_queue.put((u.id, TIP_MAP[amount_str], u.username, "manual_tip"))
+                            await self.respond(user, f"💸 Queued {amount_str} tip to @{u.username}", source)
+                            return
+                    await self.respond(user, "❌ User not found in the room.", source)
+                else:
+                    await self.respond(user, "❌ Invalid amount. Use 1g, 5g, 10g, 50g, 100g, 500g, 1k, 5k, or 10k.", source)
+            return
+
+        # 4. Owner VIP Management Commands
+        elif clean_msg.startswith("!givevip @"):
+            target_name = clean_msg.split("@")[1].strip()
+            room_users = await self.highrise.get_room_users()
+            for u, _ in room_users.content:
+                if u.username.lower() == target_name:
+                    if u.id not in self.vip_users:
+                        self.vip_users.append(u.id)
+                        self.save_database_file()
+                        await self.respond(user, f"✅ @{u.username} has been manually granted VIP status!", source)
+                    else:
+                        await self.respond(user, f"⚠️ @{u.username} is already a VIP.", source)
+                    return
+            await self.respond(user, "❌ User not found in the room.", source)
+            return
+
+        elif clean_msg.startswith("!removevip @"):
+            target_name = clean_msg.split("@")[1].strip()
+            room_users = await self.highrise.get_room_users()
+            for u, _ in room_users.content:
+                if u.username.lower() == target_name:
+                    if u.id in self.vip_users:
+                        self.vip_users.remove(u.id)
+                        self.save_database_file()
+                        await self.respond(user, f"🚫 @{u.username} has had their VIP status revoked.", source)
+                    else:
+                        await self.respond(user, f"⚠️ @{u.username} is not a VIP.", source)
+                    return
+            await self.respond(user, "❌ User not found in the room.", source)
+            return
+
+        # 5. Owner Utility Commands
+        elif clean_msg == "!set":
             try:
                 room_users = await self.highrise.get_room_users()
                 position = None
@@ -398,10 +469,8 @@ class Bot(BaseBot):
                     data = {}
                     if os.path.exists(DATA_FILE):
                         with open(DATA_FILE, "r") as file:
-                            try:
-                                data = load(file)
-                            except Exception:
-                                data = {}
+                            try: data = load(file)
+                            except Exception: data = {}
                     
                     data["bot_position"] = {"x": position.x, "y": position.y, "z": position.z, "facing": position.facing}
                     with open(DATA_FILE, "w") as file:
@@ -410,7 +479,7 @@ class Bot(BaseBot):
                     await self.highrise.teleport(self.bot_id, position)
                     await self.respond(user, "📍 Bot position updated successfully!", source)
             except Exception as e:
-                print(f"Error handling !set command: {e}")
+                print(f"Error handling !set: {e}")
 
         elif clean_msg == "!top":
             sorted_tippers = sorted(self.tip_data.items(), key=lambda x: x[1]['total_tips'], reverse=True)[:10]
@@ -422,7 +491,6 @@ class Bot(BaseBot):
             try:
                 wallet = await self.highrise.get_wallet()
                 gold = next((currency.amount for currency in wallet.content if currency.type == 'gold'), 0)
-                # Forces whisper only for balance
                 await self.highrise.send_whisper(user.id, f"💰 Balance: {gold}g")
             except Exception:
                 pass
