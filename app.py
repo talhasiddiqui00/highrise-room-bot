@@ -1,6 +1,6 @@
 """
 Highrise Room Management Bot - Main Core Engine (app.py)
-Manages Room Controls, Loops, Saves Shared VIP data, and exposes an API endpoint for the local Music Bot.
+Manages Room Controls, Loops, Saves Shared VIP data, and exposes an API endpoint.
 """
 
 import os
@@ -228,12 +228,11 @@ class Bot(BaseBot):
                 elif reason == "stay_reward":
                     await self.highrise.chat(f"⏰ @{username} received 1g for supporting the room with their stay-time! 🎉")
                 elif reason == "manual_tip":
-                    # For !give and !giveall commands, wait quietly so it doesn't spam
                     pass
                 await asyncio.sleep(1.2)
             except Exception as e:
-                if "closing transport" in str(e).lower():
-                    os._exit(1)
+                if "closing transport" in str(e).lower() or "connection" in str(e).lower():
+                    os._exit(1) # Forces cloud host to instantly restart the bot
                 await asyncio.sleep(2.0)
             finally:
                 self.tip_queue.task_done()
@@ -258,8 +257,21 @@ class Bot(BaseBot):
             try:
                 await self.highrise.get_wallet()
             except Exception as e:
-                if "closing transport" in str(e).lower():
+                if "closing transport" in str(e).lower() or "timeout" in str(e).lower():
                     os._exit(1)
+
+    async def anti_idle_loop(self):
+        """Micro-movement every 5 minutes to prevent Highrise server from flagging bot as idle"""
+        while True:
+            await asyncio.sleep(300)
+            try:
+                pos = self.get_bot_position()
+                if pos != Position(0,0,0,"FrontRight"):
+                    await self.highrise.walk_to(Position(pos.x + 0.05, pos.y, pos.z + 0.05, pos.facing))
+                    await asyncio.sleep(1)
+                    await self.highrise.teleport(self.bot_id, pos)
+            except Exception:
+                pass
 
     async def start_announcement_loop(self) -> None:
         announcements = [
@@ -286,8 +298,10 @@ class Bot(BaseBot):
         asyncio.create_task(self.track_user_stay_durations_loop())
         asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
+        asyncio.create_task(self.anti_idle_loop())
 
     async def place_bot(self):
+        await asyncio.sleep(2.0) # Ensure server is ready before attempting teleport
         try:
             pos = self.get_bot_position()
             if pos != Position(0, 0, 0, 'FrontRight'):
@@ -295,18 +309,25 @@ class Bot(BaseBot):
         except Exception:
             pass
 
+    async def handle_welcome_flow(self, user: User):
+        """Processes the 1-second chat delay and 5-second tip delay"""
+        await asyncio.sleep(1.0) # 1 sec delay for chat
+        try:
+            await self.highrise.chat(f"👋 Welcome to the room @{user.username}! Type '!help' for information.")
+        except Exception:
+            pass
+            
+        if user.id not in self.welcome_payouts:
+            self.welcome_payouts.append(user.id)
+            self.save_database_file()
+            await asyncio.sleep(4.0) # 4 more secs = 5 total secs before tip
+            await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome"))
+
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
         if user.id == self.bot_id or "bot" in user.username.lower():
             return
         self.room_stay_tracker[user.id] = {"username": user.username, "join_time": time.time(), "hit_30m": False, "next_milestone_minutes": 30.0}
-        try:
-            await self.highrise.chat(f"👋 Welcome to the room @{user.username}! Type '!help' for information.")
-            if user.id not in self.welcome_payouts:
-                self.welcome_payouts.append(user.id)
-                self.save_database_file()
-                await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome"))
-        except Exception:
-            pass
+        asyncio.create_task(self.handle_welcome_flow(user))
 
     async def on_user_leave(self, user: User) -> None:
         await self.stop_user_emote(user.id)
@@ -352,7 +373,7 @@ class Bot(BaseBot):
         if clean_msg == "!help":
             help_text = "⚡ Commands: !list | !stop | !vip | !down"
             if is_owner:
-                help_text += " | !set | !top | !bal | !giveall | !give | !givevip | !removevip"
+                help_text += " | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip"
             await self.respond(user, help_text, source)
             return
 
@@ -453,6 +474,21 @@ class Bot(BaseBot):
                         await self.respond(user, f"⚠️ @{u.username} is not a VIP.", source)
                     return
             await self.respond(user, "❌ User not found in the room.", source)
+            return
+            
+        elif clean_msg == "!allvips":
+            if not self.vip_users:
+                await self.highrise.send_whisper(user.id, "No VIPs found in database.")
+                return
+                
+            vip_names = []
+            for v_id in self.vip_users:
+                # Attempt to get username from tip data, fallback to ID
+                name = self.tip_data.get(v_id, {}).get("username", "Unknown User")
+                vip_names.append(name)
+                
+            vip_string = ", ".join(vip_names)
+            await self.highrise.send_whisper(user.id, f"💎 Total VIPs ({len(vip_names)}): {vip_string}")
             return
 
         # 5. Owner Utility Commands
