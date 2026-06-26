@@ -49,7 +49,7 @@ EMOTE_MAP = {
     "ponder": {"id": "idle-lookup", "duration": 5.0},
     "heropose": {"id": "idle-hero", "duration": 4.5}, 
     "relaxing": {"id": "idle-floorsleeping2", "duration": 4.0},
-    "cozynap": {"id": "idle-floorsleeping", "duration": 3.5}, # ✨ Fixed: Force down instantly
+    "cozynap": {"id": "idle-floorsleeping", "duration": 3.5}, 
     "enthused": {"id": "idle-enthusiastic", "duration": 4.0},
     "feelthebeat": {"id": "idle-dance-headbobbing", "duration": 5.0}, 
     "irritated": {"id": "idle-angry", "duration": 5.0},
@@ -100,7 +100,7 @@ EMOTE_MAP = {
     "harlemshake": {"id": "emote-harlemshake", "duration": 5.0}, 
     "happy": {"id": "emote-happy", "duration": 1.8},
     "handstand": {"id": "emote-handstand", "duration": 2.2}, 
-    "greedyemote": {"id": "emoji-greedy", "duration": 2.5},
+    "greedyemote": {"id": "emote-greedy", "duration": 2.5},
     "moonwalk": {"id": "emote-gordonshuffle", "duration": 3.5}, 
     "ghostfloat": {"id": "emote-ghost-idle", "duration": 5.0},
     "gangnamstyle": {"id": "emote-gangnam", "duration": 3.5}, 
@@ -121,7 +121,7 @@ EMOTE_MAP = {
     "cold": {"id": "emote-cold", "duration": 2.0},
     "charging": {"id": "emote-charging", "duration": 3.5}, 
     "bunnyhop": {"id": "emote-bunnyhop", "duration": 4.5},
-    "bow": {"id": "bow", "duration": 1.8}, 
+    "bow": {"id": "emote-bow", "duration": 1.8}, 
     "boo": {"id": "emote-boo", "duration": 2.2},
     "homerun": {"id": "emote-baseball", "duration": 3.0}, 
     "fallingapart": {"id": "emote-apart", "duration": 2.5},
@@ -341,7 +341,7 @@ class Bot(BaseBot):
             await asyncio.sleep(300)
             try:
                 pos = self.get_bot_position()
-                if pos != Position(0,0,0,"FrontRight"):
+                if pos.x != 0 or pos.y != 0 or pos.z != 0:
                     await self.highrise.walk_to(Position(pos.x + 0.05, pos.y, pos.z + 0.05, pos.facing))
                     await asyncio.sleep(1)
                     await self.highrise.teleport(self.bot_id, pos)
@@ -490,20 +490,23 @@ class Bot(BaseBot):
 
         # 3. Owner Economy/Tipping Commands
         if clean_msg.startswith("!giveall "):
-            amount_str = clean_msg.split(" ")[1].strip()
-            if amount_str in TIP_MAP:
-                room_users = await self.highrise.get_room_users()
-                count = 0
-                for u, _ in room_users.content:
-                    if u.id != self.bot_id:
-                        await self.tip_queue.put((u.id, TIP_MAP[amount_str], u.username, "manual_tip"))
-                        count += 1
-                await self.respond(user, f"💸 Queued {amount_str} tip to {count} users in the room!", source)
-            else:
-                await self.respond(user, "❌ Invalid amount. Use 1g, 5g, 10g, 50g, 100g, 500g, 1k, 5k, or 10k.", source)
+            try:
+                amount_str = clean_msg.split(" ")[1].strip()
+                if amount_str in TIP_MAP:
+                    room_users = await self.highrise.get_room_users()
+                    count = 0
+                    for u, _ in room_users.content:
+                        if u.id != self.bot_id:
+                            await self.tip_queue.put((u.id, TIP_MAP[amount_str], u.username, "manual_tip"))
+                            count += 1
+                    await self.respond(user, f"💸 Queued {amount_str} tip to {count} users in the room!", source)
+                else:
+                    await self.respond(user, "❌ Invalid amount. Use 1g, 5g, 10g, 50g, 100g, 500g, 1k, 5k, or 10k.", source)
+            except IndexError:
+                await self.respond(user, "❌ Invalid format. Use: !giveall 10g", source)
             return
 
-        elif clean_msg.startswith("!give @"):
+        elif clean_msg.startswith("!give "):
             parts = clean_msg.split()
             if len(parts) >= 3:
                 target_name = parts[1].replace("@", "")
@@ -518,37 +521,48 @@ class Bot(BaseBot):
                     await self.respond(user, "❌ User not found in the room.", source)
                 else:
                     await self.respond(user, "❌ Invalid amount. Use 1g, 5g, 10g, 50g, 100g, 500g, 1k, 5k, or 10k.", source)
+            else:
+                await self.respond(user, "❌ Invalid format. Use: !give @username 10g", source)
             return
 
         # 4. Owner VIP Management Commands
-        elif clean_msg.startswith("!givevip @"):
-            target_name = clean_msg.split("@")[1].strip()
-            room_users = await self.highrise.get_room_users()
-            for u, _ in room_users.content:
-                if u.username.lower() == target_name:
-                    if u.id not in self.vip_users:
-                        self.vip_users.append(u.id)
-                        self.save_database_file()
-                        await self.respond(user, f"✅ @{u.username} has been manually granted VIP status!", source)
-                    else:
-                        await self.respond(user, f"⚠️ @{u.username} is already a VIP.", source)
-                    return
-            await self.respond(user, "❌ User not found in the room.", source)
+        elif clean_msg.startswith("!givevip "):
+            try:
+                target_name = clean_msg.split("@")[1].strip()
+                room_users = await self.highrise.get_room_users()
+                for u, _ in room_users.content:
+                    if u.username.lower() == target_name:
+                        if u.id not in self.vip_users:
+                            self.vip_users.append(u.id)
+                            # Add user to tip_data so !allvips correctly displays their username
+                            if u.id not in self.tip_data:
+                                self.tip_data[u.id] = {"username": u.username, "total_tips": 0}
+                            self.save_database_file()
+                            await self.respond(user, f"✅ @{u.username} has been manually granted VIP status!", source)
+                        else:
+                            await self.respond(user, f"⚠️ @{u.username} is already a VIP.", source)
+                        return
+                await self.respond(user, "❌ User not found in the room.", source)
+            except IndexError:
+                await self.respond(user, "❌ Invalid format. Use: !givevip @username", source)
             return
 
-        elif clean_msg.startswith("!removevip @"):
-            target_name = clean_msg.split("@")[1].strip()
-            room_users = await self.highrise.get_room_users()
-            for u, _ in room_users.content:
-                if u.username.lower() == target_name:
-                    if u.id in self.vip_users:
-                        self.vip_users.remove(u.id)
-                        self.save_database_file()
-                        await self.respond(user, f"🚫 @{u.username} has had their VIP status revoked.", source)
-                    else:
-                        await self.respond(user, f"⚠️ @{u.username} is not a VIP.", source)
-                    return
-            await self.respond(user, "❌ User not found in the room.", source)
+        elif clean_msg.startswith("!removevip "):
+            try:
+                target_name = clean_msg.split("@")[1].strip()
+                room_users = await self.highrise.get_room_users()
+                for u, _ in room_users.content:
+                    if u.username.lower() == target_name:
+                        if u.id in self.vip_users:
+                            self.vip_users.remove(u.id)
+                            self.save_database_file()
+                            await self.respond(user, f"🚫 @{u.username} has had their VIP status revoked.", source)
+                        else:
+                            await self.respond(user, f"⚠️ @{u.username} is not a VIP.", source)
+                        return
+                await self.respond(user, "❌ User not found in the room.", source)
+            except IndexError:
+                await self.respond(user, "❌ Invalid format. Use: !removevip @username", source)
             return
             
         elif clean_msg == "!allvips":
@@ -558,7 +572,6 @@ class Bot(BaseBot):
                 
             vip_names = []
             for v_id in self.vip_users:
-                # Attempt to get username from tip data, fallback to ID
                 name = self.tip_data.get(v_id, {}).get("username", "Unknown User")
                 vip_names.append(name)
                 
