@@ -1,6 +1,6 @@
 """
 Highrise Room Management Bot - Main Core Engine (app.py)
-Manages Room Controls, Loops, Saves Shared VIP data, and exposes an API endpoint.
+With Anti-Duplication Locks, Debouncing, and Initialization Guards.
 """
 
 import os
@@ -30,7 +30,6 @@ TIP_MAP = {
 }
 
 EMOTE_MAP = {
-    # --- IDLES & LOOPS (Forced into tight loop cycles) ---
     "rest": {"id": "sit-open", "duration": 4.5}, 
     "zombie": {"id": "idle_zombie", "duration": 5.0},
     "relaxed": {"id": "idle_layingdown2", "duration": 5.5}, 
@@ -53,8 +52,6 @@ EMOTE_MAP = {
     "enthused": {"id": "idle-enthusiastic", "duration": 4.0},
     "feelthebeat": {"id": "idle-dance-headbobbing", "duration": 5.0}, 
     "irritated": {"id": "idle-angry", "duration": 5.0},
-
-    # --- EMOTES & ACTIONS (Cut tight to prevent snapping to attention) ---
     "fastsing": {"id": "emote-sicklycute-sing-fast", "duration": 4.0}, 
     "slowsing": {"id": "emote-sicklycute-sing-slow", "duration": 4.0},
     "yes": {"id": "emote-yes", "duration": 1.5}, 
@@ -125,8 +122,6 @@ EMOTE_MAP = {
     "boo": {"id": "emote-boo", "duration": 2.2},
     "homerun": {"id": "emote-baseball", "duration": 3.0}, 
     "fallingapart": {"id": "emote-apart", "duration": 2.5},
-
-    # --- EMOJIS & SHORT BURSTS ---
     "thumbsup": {"id": "emoji-thumbsup", "duration": 1.5}, 
     "point": {"id": "emoji-there", "duration": 1.0},
     "sneeze": {"id": "emoji-sneeze", "duration": 1.5}, 
@@ -149,8 +144,6 @@ EMOTE_MAP = {
     "raisetheroof": {"id": "emoji-celebrate", "duration": 1.8},
     "arrogance": {"id": "emoji-arrogance", "duration": 3.0}, 
     "angry": {"id": "emoji-angry", "duration": 2.5},
-
-    # --- DANCES ---
     "voguehands": {"id": "dance-voguehands", "duration": 4.0}, 
     "savagedance": {"id": "dance-tiktok8", "duration": 4.5},
     "dontstartnow": {"id": "dance-tiktok2", "duration": 4.0}, 
@@ -202,7 +195,13 @@ class Bot(BaseBot):
         self.bot_id = None
         self.owner_id = None
         self.owner_username = "sadi_key"
-        self.bot_status = False
+        
+        # --- LOCKS TO PREVENT DUPLICATION ---
+        self.is_initialized = False 
+        self.last_command_time = {} 
+        self.announcement_task = None 
+        # ------------------------------------
+
         self.tip_data = {}
         self.vip_users = []
         self.welcome_payouts = []
@@ -276,8 +275,8 @@ class Bot(BaseBot):
                 await asyncio.sleep(duration)
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            print(f"Error looping emote: {e}")
+        except Exception:
+            pass
         finally:
             if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
                 del self.active_emote_loops[user_id]
@@ -302,12 +301,10 @@ class Bot(BaseBot):
                     await self.highrise.chat(f"🎉 @{username}, enjoy your 1g welcome bonus!")
                 elif reason == "stay_reward":
                     await self.highrise.chat(f"⏰ @{username} received 1g for supporting the room with their stay-time! 🎉")
-                elif reason == "manual_tip":
-                    pass
                 await asyncio.sleep(1.2)
             except Exception as e:
                 if "closing transport" in str(e).lower() or "connection" in str(e).lower():
-                    os._exit(1) # Forces cloud host to instantly restart the bot
+                    os._exit(1)
                 await asyncio.sleep(2.0)
             finally:
                 self.tip_queue.task_done()
@@ -336,7 +333,6 @@ class Bot(BaseBot):
                     os._exit(1)
 
     async def anti_idle_loop(self):
-        """Micro-movement every 5 minutes to prevent Highrise server from flagging bot as idle"""
         while True:
             await asyncio.sleep(300)
             try:
@@ -359,24 +355,33 @@ class Bot(BaseBot):
                 room_users = await self.highrise.get_room_users()
                 if room_users and len(room_users.content) > 1:
                     await self.highrise.chat(random.choice(announcements))
-                await asyncio.sleep(60)
+                await asyncio.sleep(90) # Announcements every 90 seconds
             except Exception:
                 await asyncio.sleep(10)
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
+        # Prevent SDK reconnects from duplicating background tasks
+        if self.is_initialized:
+            return
+            
         print("Management Bot Connected")
         self.bot_id = session_metadata.user_id
         self.owner_id = session_metadata.room_info.owner_id
-        self.bot_status = True
+        self.is_initialized = True
+        
         await self.place_bot()
+        
         asyncio.create_task(self.process_tip_queue_worker())
         asyncio.create_task(self.track_user_stay_durations_loop())
-        asyncio.create_task(self.start_announcement_loop())
         asyncio.create_task(self.connection_watchdog_loop())
         asyncio.create_task(self.anti_idle_loop())
+        
+        # Start announcement loop safely
+        if self.announcement_task is None or self.announcement_task.done():
+            self.announcement_task = asyncio.create_task(self.start_announcement_loop())
 
     async def place_bot(self):
-        await asyncio.sleep(2.0) # Ensure server is ready before attempting teleport
+        await asyncio.sleep(2.0)
         try:
             pos = self.get_bot_position()
             if pos != Position(0, 0, 0, 'FrontRight'):
@@ -385,8 +390,7 @@ class Bot(BaseBot):
             pass
 
     async def handle_welcome_flow(self, user: User):
-        """Processes the 1-second chat delay and 5-second tip delay"""
-        await asyncio.sleep(1.0) # 1 sec delay for chat
+        await asyncio.sleep(1.0)
         try:
             await self.highrise.chat(f"👋 Welcome to the room @{user.username}! Type '!help' for information.")
         except Exception:
@@ -395,7 +399,7 @@ class Bot(BaseBot):
         if user.id not in self.welcome_payouts:
             self.welcome_payouts.append(user.id)
             self.save_database_file()
-            await asyncio.sleep(4.0) # 4 more secs = 5 total secs before tip
+            await asyncio.sleep(4.0) 
             await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome"))
 
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
@@ -431,11 +435,27 @@ class Bot(BaseBot):
         await self.command_handler(user, message, "whisper")
 
     async def command_handler(self, user: User, message: str, source: str):
+        # 1. Reject empty messages
+        if not message or not message.strip():
+            return
+
         clean_msg = message.lower().strip()
+        
+        # 2. DEBOUNCE LOCK: Prevent identical commands within 1.5 seconds
+        now = time.time()
+        user_history = self.last_command_time.get(user.id, {})
+        last_time = user_history.get(clean_msg, 0)
+        
+        if now - last_time < 1.5:
+            return # Block duplicate from double-firing events
+            
+        user_history[clean_msg] = now
+        self.last_command_time[user.id] = user_history
+
         is_owner = (user.username.lower() == self.owner_username.lower())
         is_vip = (user.id in self.vip_users)
 
-        # 1. Handle Emote Triggering
+        # 3. Handle Emote Triggering
         normalized_msg = clean_msg.replace(" ", "")
         if normalized_msg in EMOTE_MAP:
             await self.stop_user_emote(user.id)
@@ -444,7 +464,7 @@ class Bot(BaseBot):
             await self.respond(user, f"🎭 Now looping! Type '!stop' to end.", source)
             return
 
-        # 2. Standard Commands
+        # 4. Standard Commands
         if clean_msg == "!help":
             help_text = "⚡ Commands: !list | !stop | !vip | !down"
             if is_owner:
@@ -488,7 +508,6 @@ class Bot(BaseBot):
         if not is_owner:
             return
 
-        # 3. Owner Economy/Tipping Commands
         if clean_msg.startswith("!giveall "):
             try:
                 amount_str = clean_msg.split(" ")[1].strip()
@@ -525,7 +544,6 @@ class Bot(BaseBot):
                 await self.respond(user, "❌ Invalid format. Use: !give @username 10g", source)
             return
 
-        # 4. Owner VIP Management Commands
         elif clean_msg.startswith("!givevip "):
             try:
                 target_name = clean_msg.split("@")[1].strip()
@@ -534,7 +552,6 @@ class Bot(BaseBot):
                     if u.username.lower() == target_name:
                         if u.id not in self.vip_users:
                             self.vip_users.append(u.id)
-                            # Add user to tip_data so !allvips correctly displays their username
                             if u.id not in self.tip_data:
                                 self.tip_data[u.id] = {"username": u.username, "total_tips": 0}
                             self.save_database_file()
@@ -579,7 +596,6 @@ class Bot(BaseBot):
             await self.highrise.send_whisper(user.id, f"💎 Total VIPs ({len(vip_names)}): {vip_string}")
             return
 
-        # 5. Owner Utility Commands
         elif clean_msg == "!set":
             try:
                 room_users = await self.highrise.get_room_users()
@@ -604,12 +620,14 @@ class Bot(BaseBot):
                     await self.respond(user, "📍 Bot position updated successfully!", source)
             except Exception as e:
                 print(f"Error handling !set: {e}")
+            return
 
         elif clean_msg == "!top":
             sorted_tippers = sorted(self.tip_data.items(), key=lambda x: x[1]['total_tips'], reverse=True)[:10]
             formatted = [f"{i+1}. {d['username']} ({d['total_tips']}g)" for i, (_, d) in enumerate(sorted_tippers)]
             leaderboard_text = "\n".join(formatted)
             await self.respond(user, f"Top Tippers:\n{leaderboard_text}", source)
+            return
 
         elif clean_msg == "!bal":
             try:
@@ -618,6 +636,7 @@ class Bot(BaseBot):
                 await self.highrise.send_whisper(user.id, f"💰 Balance: {gold}g")
             except Exception:
                 pass
+            return
 
     async def respond(self, user: User, msg: str, source: str):
         if source == "chat":
