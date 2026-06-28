@@ -35,11 +35,24 @@ TIP_MAP = {
 # The bot will whisper you all item IDs currently in its inventory.
 # Paste the ones you want below, then use !setoutfit or restart.
 # ---------------------------------------------------------------
-BOT_OUTFIT = [
-    # Example format — replace with your real item IDs:
-    # "clothing-top-n_masc_basic_tee_white-0",
-    # "clothing-bottom-n_masc_jeans_slim_blue-0",
-    # "hair-male-basic_02-0",
+# ---------------------------------------------------------------
+# BOT OUTFIT — List the item names you want the bot to wear.
+# These are searched via the Highrise web API by name.
+# Use !equip <item name> to equip a single item instantly.
+# Use !setoutfit to re-apply all items below on demand.
+# ---------------------------------------------------------------
+BOT_OUTFIT_NAMES = [
+    "hair_front-n_malenew05",
+    "hair_back-n_malenew05",
+    "body-flesh",
+    "eye-n_basic2018malesquaresleepy",
+    "eyebrow-n_basic2018newbrows07",
+    "nose-n_basic2018newnose05",
+    "mouth-basic2018chippermouth",
+    "freckle-n_basic2018freckle04",
+    "shirt-n_room32019denimjackethoodie",
+    "pants-n_starteritems2019cuffedjeanswhite",
+    "shoes-n_room32019socksneakersgrey",
 ]
 
 EMOTE_MAP = {
@@ -396,20 +409,25 @@ class Bot(BaseBot):
             self.announcement_task = asyncio.create_task(self.start_announcement_loop())
 
     async def equip_bot_outfit(self):
-        """Equip the bot with the items defined in BOT_OUTFIT."""
-        if not BOT_OUTFIT:
+        """Equip the bot using webapi item search — no gifting required."""
+        if not BOT_OUTFIT_NAMES:
             return
         try:
-            inventory = await self.highrise.get_inventory()
             outfit = []
-            for item in inventory.items:
-                if item.type in BOT_OUTFIT:
-                    outfit.append(item)
+            for item_name in BOT_OUTFIT_NAMES:
+                try:
+                    response = await self.webapi.get_items(item_name=item_name)
+                    if response and hasattr(response, 'items') and response.items:
+                        outfit.append(response.items[0])
+                    else:
+                        print(f"[OUTFIT] Item not found: {item_name}")
+                except Exception as e:
+                    print(f"[OUTFIT] Error fetching '{item_name}': {e}")
             if outfit:
                 await self.highrise.set_outfit(outfit)
                 print(f"[OUTFIT] Equipped {len(outfit)} item(s).")
             else:
-                print("[OUTFIT] No matching items found in inventory. Check your BOT_OUTFIT item IDs.")
+                print("[OUTFIT] No items could be equipped.")
         except Exception as e:
             print(f"[OUTFIT ERROR] {e}")
 
@@ -548,7 +566,20 @@ class Bot(BaseBot):
         if not is_owner:
             return
 
-        if clean_msg == "!getoutfit":
+        if clean_msg.startswith("!equip "):
+            item_name = message.strip()[7:]  # preserve original casing
+            try:
+                response = await self.webapi.get_items(item_name=item_name)
+                if response and hasattr(response, 'items') and response.items:
+                    await self.highrise.set_outfit([response.items[0]])
+                    await self.respond(user, f"✅ Bot is now wearing: {item_name}", source)
+                else:
+                    await self.respond(user, f"❌ Item not found: {item_name}", source)
+            except Exception as e:
+                await self.respond(user, f"❌ Error: {e}", source)
+            return
+
+        elif clean_msg == "!getoutfit":
             try:
                 inventory = await self.highrise.get_inventory()
                 if not inventory.items:
@@ -563,10 +594,10 @@ class Bot(BaseBot):
 
         elif clean_msg == "!setoutfit":
             await self.equip_bot_outfit()
-            if BOT_OUTFIT:
+            if BOT_OUTFIT_NAMES:
                 await self.respond(user, "✅ Bot outfit applied!", source)
             else:
-                await self.respond(user, "⚠️ BOT_OUTFIT list is empty. Add item IDs to the code first.", source)
+                await self.respond(user, "⚠️ BOT_OUTFIT_NAMES list is empty. Add item names to the code first.", source)
             return
 
         elif clean_msg.startswith("!giveowner ") and user.username.lower() == self.owner_username.lower():
