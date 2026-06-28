@@ -554,20 +554,9 @@ class Bot(BaseBot):
                 if not inventory.items:
                     await self.highrise.send_whisper(user.id, "Bot inventory is empty.")
                     return
-                items_per_msg = []
-                current = ""
-                for item in inventory.items:
-                    entry = item.type + ", "
-                    if len(current) + len(entry) > 200:
-                        items_per_msg.append(current.rstrip(", "))
-                        current = entry
-                    else:
-                        current += entry
-                if current:
-                    items_per_msg.append(current.rstrip(", "))
                 await self.highrise.send_whisper(user.id, f"🎽 Bot inventory ({len(inventory.items)} items):")
-                for chunk in items_per_msg:
-                    await self.highrise.send_whisper(user.id, chunk)
+                for i, item in enumerate(inventory.items):
+                    await self.highrise.send_whisper(user.id, f"{i+1}. {item.type}")
             except Exception as e:
                 await self.highrise.send_whisper(user.id, f"❌ Error: {e}")
             return
