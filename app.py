@@ -556,7 +556,7 @@ class Bot(BaseBot):
                     return
                 await self.highrise.send_whisper(user.id, f"🎽 Bot inventory ({len(inventory.items)} items):")
                 for i, item in enumerate(inventory.items):
-                    await self.highrise.send_whisper(user.id, f"{i+1}. {item.type}")
+                    await self.highrise.send_whisper(user.id, f"{i+1}. {str(item)}")
             except Exception as e:
                 await self.highrise.send_whisper(user.id, f"❌ Error: {e}")
             return
