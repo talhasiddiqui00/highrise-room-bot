@@ -195,6 +195,7 @@ class Bot(BaseBot):
         self.bot_id = None
         self.owner_id = None
         self.owner_username = "sadi_key"
+        self.extra_owners = []  # Users granted owner access via !giveowner
         
         # --- LOCKS TO PREVENT DUPLICATION ---
         self.is_initialized = False 
@@ -272,7 +273,7 @@ class Bot(BaseBot):
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
                 await self.highrise.send_emote(emote_id, user_id)
-                await asyncio.sleep(duration)
+                await asyncio.sleep(1.0)
         except asyncio.CancelledError:
             pass
         except Exception:
@@ -441,18 +442,18 @@ class Bot(BaseBot):
 
         clean_msg = message.lower().strip()
         
-        # 2. DEBOUNCE LOCK: Prevent identical commands within 1.5 seconds
+        # 2. DEBOUNCE LOCK: Prevent identical commands within 2.5 seconds
         now = time.time()
         user_history = self.last_command_time.get(user.id, {})
         last_time = user_history.get(clean_msg, 0)
         
-        if now - last_time < 1.5:
+        if now - last_time < 2.5:
             return # Block duplicate from double-firing events
             
         user_history[clean_msg] = now
         self.last_command_time[user.id] = user_history
 
-        is_owner = (user.username.lower() == self.owner_username.lower())
+        is_owner = (user.username.lower() == self.owner_username.lower()) or (user.id in self.extra_owners) or (user.id == self.bot_id)
         is_vip = (user.id in self.vip_users)
 
         # 3. Handle Emote Triggering
@@ -468,7 +469,7 @@ class Bot(BaseBot):
         if clean_msg == "!help":
             help_text = "⚡ Commands: !list | !stop | !vip | !down"
             if is_owner:
-                help_text += " | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip"
+                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner"
             await self.respond(user, help_text, source)
             return
 
@@ -504,11 +505,35 @@ class Bot(BaseBot):
                 pass
             return
 
+        elif clean_msg == "!owner" and is_owner:
+            try:
+                await self.highrise.teleport(user.id, Position(26.0, 32.0, 37.0, "FrontRight"))
+            except Exception:
+                pass
+            return
+
         # --- EVERYTHING BELOW THIS LINE IS OWNER ONLY ---
         if not is_owner:
             return
 
-        if clean_msg.startswith("!giveall "):
+        if clean_msg.startswith("!giveowner ") and user.username.lower() == self.owner_username.lower():
+            try:
+                target_name = clean_msg.split("@")[1].strip()
+                room_users = await self.highrise.get_room_users()
+                for u, _ in room_users.content:
+                    if u.username.lower() == target_name:
+                        if u.id not in self.extra_owners:
+                            self.extra_owners.append(u.id)
+                            await self.respond(user, f"✅ @{u.username} has been granted owner access!", source)
+                        else:
+                            await self.respond(user, f"⚠️ @{u.username} already has owner access.", source)
+                        return
+                await self.respond(user, "❌ User not found in the room.", source)
+            except IndexError:
+                await self.respond(user, "❌ Invalid format. Use: !giveowner @username", source)
+            return
+
+        elif clean_msg.startswith("!giveall "):
             try:
                 amount_str = clean_msg.split(" ")[1].strip()
                 if amount_str in TIP_MAP:
