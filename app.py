@@ -487,7 +487,7 @@ class Bot(BaseBot):
         announcements = [
             "🎭 <color=#00FFFF><b>Having fun?</b></color> Type a number between <color=#FFA500><b>1 - 254</b></color> to perform an emote! e.g. <color=#FFD700><b>1, 2, 3</b></color> — Type <color=#FF00FF><b>!list</b></color> to see all emotes & <color=#FF0000><b>!stop</b></color> to stop! 🕺💃",
             "💎 <color=#FFD700><b>TIP 500g+</b></color> to the Bot to become a <color=#FF0000><b>Permanent VIP</b></color>! 👑 Or <color=#00FF00><b>TIP the Jar</b></color> and DM the <color=#FF00FF><b>Owner</b></color> or <color=#00FFFF><b>MOD</b></color>! 🎁",
-            "💡 <color=#00FF00><b>Need help?</b></color> Type <color=#00FFFF><b>!help</b></color> for all commands! VIPs type <color=#FFD700><b>!vip</b></color> to teleport to the VIP lounge & <color=#FF00FF><b>!bring @username</b></color> to invite a friend! 🌟"
+            "💡 <color=#00FF00><b>Need help?</b></color> Type <color=#00FFFF><b>!help</b></color> for all commands! VIPs type <color=#FFD700><b>!vip</b></color> to teleport to the VIP lounge! 🌟"
         ]
         while True:
             try:
