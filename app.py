@@ -32,142 +32,142 @@ TIP_MAP = {
 
 
 EMOTE_MAP = {
-    "rest": {"id": "sit-open", "duration": 4.5}, 
-    "zombie": {"id": "idle_zombie", "duration": 5.0},
-    "relaxed": {"id": "idle_layingdown2", "duration": 5.5}, 
-    "attentive": {"id": "idle_layingdown", "duration": 6.0},
-    "sleepy": {"id": "idle-sleep", "duration": 5.0}, 
-    "poutyface": {"id": "idle-sad", "duration": 5.0},
-    "posh": {"id": "idle-posh", "duration": 5.0}, 
-    "tired": {"id": "idle-loop-tired", "duration": 4.5},
-    "taploop": {"id": "idle-loop-tapdance", "duration": 3.5}, 
-    "sit": {"id": "idle-loop-sitfloor", "duration": 5.0},
-    "shy": {"id": "idle-loop-shy", "duration": 4.0}, 
-    "bummed": {"id": "idle-loop-sad", "duration": 3.5},
-    "chillin": {"id": "idle-loop-happy", "duration": 4.5}, 
-    "annoyed": {"id": "idle-loop-annoyed", "duration": 4.0},
-    "aerobics": {"id": "idle-loop-aerobics", "duration": 4.0}, 
-    "ponder": {"id": "idle-lookup", "duration": 5.0},
-    "heropose": {"id": "idle-hero", "duration": 4.5}, 
-    "relaxing": {"id": "idle-floorsleeping2", "duration": 4.0},
-    "cozynap": {"id": "idle-floorsleeping", "duration": 3.5}, 
-    "enthused": {"id": "idle-enthusiastic", "duration": 4.0},
-    "feelthebeat": {"id": "idle-dance-headbobbing", "duration": 5.0}, 
-    "irritated": {"id": "idle-angry", "duration": 5.0},
-    "fastsing": {"id": "emote-sicklycute-sing-fast", "duration": 4.0}, 
-    "slowsing": {"id": "emote-sicklycute-sing-slow", "duration": 4.0},
-    "yes": {"id": "emote-yes", "duration": 1.5}, 
-    "ibelieveicanfly": {"id": "emote-wings", "duration": 4.5},
-    "thewave": {"id": "emote-wave", "duration": 1.5}, 
-    "think": {"id": "emote-think", "duration": 2.0},
-    "theatrical": {"id": "emote-theatrical", "duration": 4.0}, 
-    "tapdance": {"id": "emote-tapdance", "duration": 4.5},
-    "superrun": {"id": "emote-superrun", "duration": 3.0}, 
-    "superpunch": {"id": "emote-superpunch", "duration": 2.0},
-    "sumofight": {"id": "emote-sumo", "duration": 4.0}, 
-    "thumbsuck": {"id": "emote-suckthumb", "duration": 2.2},
-    "splitsdrop": {"id": "emote-splitsdrop", "duration": 2.5}, 
-    "snowballfight": {"id": "emote-snowball", "duration": 2.5},
-    "snowangel": {"id": "emote-snowangel", "duration": 3.0}, 
-    "handshake": {"id": "emote-secrethandshake", "duration": 2.0},
-    "sad": {"id": "emote-sad", "duration": 2.5}, 
-    "pull": {"id": "emote-ropepull", "duration": 4.0},
-    "roll": {"id": "emote-roll", "duration": 2.0}, 
-    "rofl": {"id": "emote-rofl", "duration": 3.0},
-    "robot": {"id": "emote-robot", "duration": 4.0}, 
-    "rainbow": {"id": "emote-rainbow", "duration": 1.8},
-    "proposing": {"id": "emote-proposing", "duration": 2.5}, 
-    "peekaboo": {"id": "emote-peekaboo", "duration": 2.0},
-    "peace": {"id": "emote-peace", "duration": 2.5}, 
-    "panic": {"id": "emote-panic", "duration": 1.5},
-    "no": {"id": "emote-no", "duration": 1.5}, 
-    "ninjarun": {"id": "emote-ninjarun", "duration": 2.5},
-    "nightfever": {"id": "emote-nightfever", "duration": 2.5}, 
-    "monsterfail": {"id": "emote-monster_fail", "duration": 2.5},
-    "model": {"id": "emote-model", "duration": 3.0}, 
-    "levelup": {"id": "emote-levelup", "duration": 3.0},
-    "amused": {"id": "emote-laughing2", "duration": 2.5}, 
-    "laugh": {"id": "emote-laughing", "duration": 1.5},
-    "kiss": {"id": "emote-kiss", "duration": 1.2}, 
-    "superkick": {"id": "emote-kicking", "duration": 2.5},
-    "jump": {"id": "emote-jumpb", "duration": 2.0}, 
-    "judochop": {"id": "emote-judochop", "duration": 1.2},
-    "jetpack": {"id": "emote-jetpack", "duration": 5.0}, 
-    "hugyourself": {"id": "emote-hugyourself", "duration": 2.5},
-    "sweating": {"id": "emote-hot", "duration": 2.2}, 
-    "hello": {"id": "emote-hello", "duration": 1.5},
-    "harlemshake": {"id": "emote-harlemshake", "duration": 5.0}, 
-    "happy": {"id": "emote-happy", "duration": 1.8},
-    "handstand": {"id": "emote-handstand", "duration": 2.2}, 
-    "greedyemote": {"id": "emote-greedy", "duration": 2.5},
-    "moonwalk": {"id": "emote-gordonshuffle", "duration": 3.5}, 
-    "ghostfloat": {"id": "emote-ghost-idle", "duration": 5.0},
-    "gangnamstyle": {"id": "emote-gangnam", "duration": 3.5}, 
-    "faint": {"id": "emote-fainting", "duration": 5.0},
-    "clumsy": {"id": "emote-fail2", "duration": 3.0}, 
-    "fall": {"id": "emote-fail1", "duration": 2.5},
-    "facepalm": {"id": "emote-exasperatedb", "duration": 1.5}, 
-    "exasperated": {"id": "emote-exasperated", "duration": 1.2},
-    "elbowbump": {"id": "emote-elbowbump", "duration": 2.0}, 
-    "disco": {"id": "emote-disco", "duration": 2.5},
-    "blastoff": {"id": "emote-disappear", "duration": 3.0}, 
-    "faintdrop": {"id": "emote-deathdrop", "duration": 2.0},
-    "collapse": {"id": "emote-death2", "duration": 2.5}, 
-    "revival": {"id": "emote-death", "duration": 3.0},
-    "dab": {"id": "emote-dab", "duration": 1.5}, 
-    "curtsy": {"id": "emote-curtsy", "duration": 1.2},
-    "confusion": {"id": "emote-confused", "duration": 4.0}, 
-    "cold": {"id": "emote-cold", "duration": 2.0},
-    "charging": {"id": "emote-charging", "duration": 3.5}, 
-    "bunnyhop": {"id": "emote-bunnyhop", "duration": 4.5},
-    "bow": {"id": "emote-bow", "duration": 1.8}, 
-    "boo": {"id": "emote-boo", "duration": 2.2},
-    "homerun": {"id": "emote-baseball", "duration": 3.0}, 
-    "fallingapart": {"id": "emote-apart", "duration": 2.5},
-    "thumbsup": {"id": "emoji-thumbsup", "duration": 1.5}, 
-    "point": {"id": "emoji-there", "duration": 1.0},
-    "sneeze": {"id": "emoji-sneeze", "duration": 1.5}, 
-    "smirk": {"id": "emoji-smirking", "duration": 2.5},
-    "sick": {"id": "emoji-sick", "duration": 2.5}, 
-    "gasp": {"id": "emoji-scared", "duration": 1.5},
-    "punch": {"id": "emoji-punch", "duration": 0.8}, 
-    "pray": {"id": "emoji-pray", "duration": 2.5},
-    "stinky": {"id": "emoji-poop", "duration": 2.5}, 
-    "naughty": {"id": "emoji-naughty", "duration": 2.2},
-    "mindblown": {"id": "emoji-mind-blown", "duration": 1.2}, 
-    "lying": {"id": "emoji-lying", "duration": 3.0},
-    "levitate": {"id": "emoji-halo", "duration": 2.8}, 
-    "fireballlunge": {"id": "emoji-hadoken", "duration": 1.5},
-    "giveup": {"id": "emoji-give-up", "duration": 2.5}, 
-    "tummyache": {"id": "emoji-gagging", "duration": 2.5},
-    "stunned": {"id": "emoji-dizzy", "duration": 2.0}, 
-    "sob": {"id": "emoji-crying", "duration": 1.8},
-    "clap": {"id": "emoji-clapping", "duration": 1.0}, 
-    "raisetheroof": {"id": "emoji-celebrate", "duration": 1.8},
-    "arrogance": {"id": "emoji-arrogance", "duration": 3.0}, 
-    "angry": {"id": "emoji-angry", "duration": 2.5},
-    "voguehands": {"id": "dance-voguehands", "duration": 4.0}, 
-    "savagedance": {"id": "dance-tiktok8", "duration": 4.5},
-    "dontstartnow": {"id": "dance-tiktok2", "duration": 4.0}, 
-    "smoothwalk": {"id": "dance-smoothwalk", "duration": 3.0},
-    "ringonit": {"id": "dance-singleladies", "duration": 5.0}, 
-    "letsgoshopping": {"id": "dance-shoppingcart", "duration": 2.0},
-    "russian": {"id": "dance-russian", "duration": 4.0}, 
-    "pennywise": {"id": "dance-pennywise", "duration": 0.8},
-    "orangejuicedance": {"id": "dance-orangejustice", "duration": 3.0}, 
-    "rockout": {"id": "dance-metal", "duration": 5.0},
-    "macarena": {"id": "dance-macarena", "duration": 5.0}, 
-    "handsintheair": {"id": "dance-handsup", "duration": 5.0},
-    "duckwalk": {"id": "dance-duckwalk", "duration": 4.5}, 
-    "kpopdance": {"id": "dance-blackpink", "duration": 3.5},
-    "pushups": {"id": "dance-aerobics", "duration": 4.0}, 
-    "hyped": {"id": "emote-hyped", "duration": 3.5},
-    "jinglebell": {"id": "dance-jinglebell", "duration": 4.5}, 
-    "nervous": {"id": "idle-nervous", "duration": 5.0},
-    "toilet": {"id": "idle-toilet", "duration": 6.0}, 
-    "attention": {"id": "emote-attention", "duration": 2.0},
-    "astronaut": {"id": "emote-astronaut", "duration": 4.5}, 
-    "dancezombie": {"id": "dance-zombie", "duration": 4.5}
+    1:  {"name": "rest",          "id": "sit-open",                    "duration": 4.5},
+    2:  {"name": "zombie",        "id": "idle_zombie",                  "duration": 5.0},
+    3:  {"name": "relaxed",       "id": "idle_layingdown2",             "duration": 5.5},
+    4:  {"name": "attentive",     "id": "idle_layingdown",              "duration": 6.0},
+    5:  {"name": "sleepy",        "id": "idle-sleep",                   "duration": 5.0},
+    6:  {"name": "poutyface",     "id": "idle-sad",                     "duration": 5.0},
+    7:  {"name": "posh",          "id": "idle-posh",                    "duration": 5.0},
+    8:  {"name": "tired",         "id": "idle-loop-tired",              "duration": 4.5},
+    9:  {"name": "taploop",       "id": "idle-loop-tapdance",           "duration": 3.5},
+    10: {"name": "sit",           "id": "idle-loop-sitfloor",           "duration": 5.0},
+    11: {"name": "shy",           "id": "idle-loop-shy",                "duration": 4.0},
+    12: {"name": "bummed",        "id": "idle-loop-sad",                "duration": 3.5},
+    13: {"name": "chillin",       "id": "idle-loop-happy",              "duration": 4.5},
+    14: {"name": "annoyed",       "id": "idle-loop-annoyed",            "duration": 4.0},
+    15: {"name": "aerobics",      "id": "idle-loop-aerobics",           "duration": 4.0},
+    16: {"name": "ponder",        "id": "idle-lookup",                  "duration": 5.0},
+    17: {"name": "heropose",      "id": "idle-hero",                    "duration": 4.5},
+    18: {"name": "relaxing",      "id": "idle-floorsleeping2",          "duration": 4.0},
+    19: {"name": "cozynap",       "id": "idle-floorsleeping",           "duration": 3.5},
+    20: {"name": "enthused",      "id": "idle-enthusiastic",            "duration": 4.0},
+    21: {"name": "feelthebeat",   "id": "idle-dance-headbobbing",       "duration": 5.0},
+    22: {"name": "irritated",     "id": "idle-angry",                   "duration": 5.0},
+    23: {"name": "fastsing",      "id": "emote-sicklycute-sing-fast",   "duration": 4.0},
+    24: {"name": "slowsing",      "id": "emote-sicklycute-sing-slow",   "duration": 4.0},
+    25: {"name": "yes",           "id": "emote-yes",                    "duration": 1.5},
+    26: {"name": "ibelieveicanfly","id": "emote-wings",                 "duration": 4.5},
+    27: {"name": "thewave",       "id": "emote-wave",                   "duration": 1.5},
+    28: {"name": "think",         "id": "emote-think",                  "duration": 2.0},
+    29: {"name": "theatrical",    "id": "emote-theatrical",             "duration": 4.0},
+    30: {"name": "tapdance",      "id": "emote-tapdance",               "duration": 4.5},
+    31: {"name": "superrun",      "id": "emote-superrun",               "duration": 3.0},
+    32: {"name": "superpunch",    "id": "emote-superpunch",             "duration": 2.0},
+    33: {"name": "sumofight",     "id": "emote-sumo",                   "duration": 4.0},
+    34: {"name": "thumbsuck",     "id": "emote-suckthumb",              "duration": 2.2},
+    35: {"name": "splitsdrop",    "id": "emote-splitsdrop",             "duration": 2.5},
+    36: {"name": "snowballfight", "id": "emote-snowball",               "duration": 2.5},
+    37: {"name": "snowangel",     "id": "emote-snowangel",              "duration": 3.0},
+    38: {"name": "handshake",     "id": "emote-secrethandshake",        "duration": 2.0},
+    39: {"name": "sad",           "id": "emote-sad",                    "duration": 2.5},
+    40: {"name": "pull",          "id": "emote-ropepull",               "duration": 4.0},
+    41: {"name": "roll",          "id": "emote-roll",                   "duration": 2.0},
+    42: {"name": "rofl",          "id": "emote-rofl",                   "duration": 3.0},
+    43: {"name": "robot",         "id": "emote-robot",                  "duration": 4.0},
+    44: {"name": "rainbow",       "id": "emote-rainbow",                "duration": 1.8},
+    45: {"name": "proposing",     "id": "emote-proposing",              "duration": 2.5},
+    46: {"name": "peekaboo",      "id": "emote-peekaboo",               "duration": 2.0},
+    47: {"name": "peace",         "id": "emote-peace",                  "duration": 2.5},
+    48: {"name": "panic",         "id": "emote-panic",                  "duration": 1.5},
+    49: {"name": "no",            "id": "emote-no",                     "duration": 1.5},
+    50: {"name": "ninjarun",      "id": "emote-ninjarun",               "duration": 2.5},
+    51: {"name": "nightfever",    "id": "emote-nightfever",             "duration": 2.5},
+    52: {"name": "monsterfail",   "id": "emote-monster_fail",           "duration": 2.5},
+    53: {"name": "model",         "id": "emote-model",                  "duration": 3.0},
+    54: {"name": "levelup",       "id": "emote-levelup",                "duration": 3.0},
+    55: {"name": "amused",        "id": "emote-laughing2",              "duration": 2.5},
+    56: {"name": "laugh",         "id": "emote-laughing",               "duration": 1.5},
+    57: {"name": "kiss",          "id": "emote-kiss",                   "duration": 1.2},
+    58: {"name": "superkick",     "id": "emote-kicking",                "duration": 2.5},
+    59: {"name": "jump",          "id": "emote-jumpb",                  "duration": 2.0},
+    60: {"name": "judochop",      "id": "emote-judochop",               "duration": 1.2},
+    61: {"name": "jetpack",       "id": "emote-jetpack",                "duration": 5.0},
+    62: {"name": "hugyourself",   "id": "emote-hugyourself",            "duration": 2.5},
+    63: {"name": "sweating",      "id": "emote-hot",                    "duration": 2.2},
+    64: {"name": "hello",         "id": "emote-hello",                  "duration": 1.5},
+    65: {"name": "harlemshake",   "id": "emote-harlemshake",            "duration": 5.0},
+    66: {"name": "happy",         "id": "emote-happy",                  "duration": 1.8},
+    67: {"name": "handstand",     "id": "emote-handstand",              "duration": 2.2},
+    68: {"name": "greedyemote",   "id": "emote-greedy",                 "duration": 2.5},
+    69: {"name": "moonwalk",      "id": "emote-gordonshuffle",          "duration": 3.5},
+    70: {"name": "ghostfloat",    "id": "emote-ghost-idle",             "duration": 5.0},
+    71: {"name": "gangnamstyle",  "id": "emote-gangnam",                "duration": 3.5},
+    72: {"name": "faint",         "id": "emote-fainting",               "duration": 5.0},
+    73: {"name": "clumsy",        "id": "emote-fail2",                  "duration": 3.0},
+    74: {"name": "fall",          "id": "emote-fail1",                  "duration": 2.5},
+    75: {"name": "facepalm",      "id": "emote-exasperatedb",           "duration": 1.5},
+    76: {"name": "exasperated",   "id": "emote-exasperated",            "duration": 1.2},
+    77: {"name": "elbowbump",     "id": "emote-elbowbump",              "duration": 2.0},
+    78: {"name": "disco",         "id": "emote-disco",                  "duration": 2.5},
+    79: {"name": "blastoff",      "id": "emote-disappear",              "duration": 3.0},
+    80: {"name": "faintdrop",     "id": "emote-deathdrop",              "duration": 2.0},
+    81: {"name": "collapse",      "id": "emote-death2",                 "duration": 2.5},
+    82: {"name": "revival",       "id": "emote-death",                  "duration": 3.0},
+    83: {"name": "dab",           "id": "emote-dab",                    "duration": 1.5},
+    84: {"name": "curtsy",        "id": "emote-curtsy",                 "duration": 1.2},
+    85: {"name": "confusion",     "id": "emote-confused",               "duration": 4.0},
+    86: {"name": "cold",          "id": "emote-cold",                   "duration": 2.0},
+    87: {"name": "charging",      "id": "emote-charging",               "duration": 3.5},
+    88: {"name": "bunnyhop",      "id": "emote-bunnyhop",               "duration": 4.5},
+    89: {"name": "bow",           "id": "emote-bow",                    "duration": 1.8},
+    90: {"name": "boo",           "id": "emote-boo",                    "duration": 2.2},
+    91: {"name": "homerun",       "id": "emote-baseball",               "duration": 3.0},
+    92: {"name": "fallingapart",  "id": "emote-apart",                  "duration": 2.5},
+    93: {"name": "thumbsup",      "id": "emoji-thumbsup",               "duration": 1.5},
+    94: {"name": "point",         "id": "emoji-there",                  "duration": 1.0},
+    95: {"name": "sneeze",        "id": "emoji-sneeze",                 "duration": 1.5},
+    96: {"name": "smirk",         "id": "emoji-smirking",               "duration": 2.5},
+    97: {"name": "sick",          "id": "emoji-sick",                   "duration": 2.5},
+    98: {"name": "gasp",          "id": "emoji-scared",                 "duration": 1.5},
+    99: {"name": "punch",         "id": "emoji-punch",                  "duration": 0.8},
+    100:{"name": "pray",          "id": "emoji-pray",                   "duration": 2.5},
+    101:{"name": "stinky",        "id": "emoji-poop",                   "duration": 2.5},
+    102:{"name": "naughty",       "id": "emoji-naughty",                "duration": 2.2},
+    103:{"name": "mindblown",     "id": "emoji-mind-blown",             "duration": 1.2},
+    104:{"name": "lying",         "id": "emoji-lying",                  "duration": 3.0},
+    105:{"name": "levitate",      "id": "emoji-halo",                   "duration": 2.8},
+    106:{"name": "fireballlunge", "id": "emoji-hadoken",                "duration": 1.5},
+    107:{"name": "giveup",        "id": "emoji-give-up",                "duration": 2.5},
+    108:{"name": "tummyache",     "id": "emoji-gagging",                "duration": 2.5},
+    109:{"name": "stunned",       "id": "emoji-dizzy",                  "duration": 2.0},
+    110:{"name": "sob",           "id": "emoji-crying",                 "duration": 1.8},
+    111:{"name": "clap",          "id": "emoji-clapping",               "duration": 1.0},
+    112:{"name": "raisetheroof",  "id": "emoji-celebrate",              "duration": 1.8},
+    113:{"name": "arrogance",     "id": "emoji-arrogance",              "duration": 3.0},
+    114:{"name": "angry",         "id": "emoji-angry",                  "duration": 2.5},
+    115:{"name": "voguehands",    "id": "dance-voguehands",             "duration": 4.0},
+    116:{"name": "savagedance",   "id": "dance-tiktok8",                "duration": 4.5},
+    117:{"name": "dontstartnow",  "id": "dance-tiktok2",                "duration": 4.0},
+    118:{"name": "smoothwalk",    "id": "dance-smoothwalk",             "duration": 3.0},
+    119:{"name": "ringonit",      "id": "dance-singleladies",           "duration": 5.0},
+    120:{"name": "letsgoshopping","id": "dance-shoppingcart",           "duration": 2.0},
+    121:{"name": "russian",       "id": "dance-russian",                "duration": 4.0},
+    122:{"name": "pennywise",     "id": "dance-pennywise",              "duration": 0.8},
+    123:{"name": "orangejuicedance","id": "dance-orangejustice",        "duration": 3.0},
+    124:{"name": "rockout",       "id": "dance-metal",                  "duration": 5.0},
+    125:{"name": "macarena",      "id": "dance-macarena",               "duration": 5.0},
+    126:{"name": "handsintheair", "id": "dance-handsup",                "duration": 5.0},
+    127:{"name": "duckwalk",      "id": "dance-duckwalk",               "duration": 4.5},
+    128:{"name": "kpopdance",     "id": "dance-blackpink",              "duration": 3.5},
+    129:{"name": "pushups",       "id": "dance-aerobics",               "duration": 4.0},
+    130:{"name": "hyped",         "id": "emote-hyped",                  "duration": 3.5},
+    131:{"name": "jinglebell",    "id": "dance-jinglebell",             "duration": 4.5},
+    132:{"name": "nervous",       "id": "idle-nervous",                 "duration": 5.0},
+    133:{"name": "toilet",        "id": "idle-toilet",                  "duration": 6.0},
+    134:{"name": "attention",     "id": "emote-attention",              "duration": 2.0},
+    135:{"name": "astronaut",     "id": "emote-astronaut",              "duration": 4.5},
+    136:{"name": "dancezombie",   "id": "dance-zombie",                 "duration": 4.5},
 }
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -221,6 +221,7 @@ class Bot(BaseBot):
         self.active_emote_loops = {}
         self.tip_queue = asyncio.Queue()
         self.room_stay_tracker = {}
+        self.welcome_in_progress = set()  # Prevent duplicate welcome messages
 
     def load_database_file(self) -> None:
         if not os.path.exists(DATA_FILE):
@@ -275,7 +276,7 @@ class Bot(BaseBot):
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
                 await self.highrise.send_emote(emote_id, user_id)
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.5)
         except asyncio.CancelledError:
             pass
         except Exception:
@@ -363,7 +364,7 @@ class Bot(BaseBot):
         announcements = [
             "✨ <color=#FF0000><b>Welcome!</b></color> Tip <color=#FFD700><b>500g+</b></color> to the Bot for permanent VIP access! 💎👑",
             "💡 <color=#00FF00><b>Need help?</b></color> Type <color=#00FFFF><b>!help</b></color> for commands and <color=#FF00FF><b>!list</b></color> for emotes! 🎭",
-            "🎶 <color=#0000FF><b>Having fun?</b></color> Just type an emote name (like <color=#FFA500><b>cozy nap</b></color>) to start looping! 🕺💃"
+            "🎶 <color=#0000FF><b>Having fun?</b></color> Type <color=#FF00FF><b>!list</b></color> to see all emotes, then type the <color=#FFA500><b>number</b></color> to start looping! 🕺💃"
         ]
         while True:
             try:
@@ -405,6 +406,9 @@ class Bot(BaseBot):
             pass
 
     async def handle_welcome_flow(self, user: User):
+        if user.id in self.welcome_in_progress:
+            return
+        self.welcome_in_progress.add(user.id)
         await asyncio.sleep(1.0)
         try:
             await self.highrise.chat(f"👋 Welcome to the room @{user.username}! Type '!help' for information.")
@@ -416,6 +420,8 @@ class Bot(BaseBot):
             self.save_database_file()
             await asyncio.sleep(4.0) 
             await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome"))
+        
+        self.welcome_in_progress.discard(user.id)
 
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
         if user.id == self.bot_id or "bot" in user.username.lower():
@@ -470,14 +476,18 @@ class Bot(BaseBot):
         is_owner = (user.username.lower() == self.owner_username.lower()) or (user.id in self.extra_owners) or (user.id == self.bot_id)
         is_vip = (user.id in self.vip_users)
 
-        # 3. Handle Emote Triggering
-        normalized_msg = clean_msg.replace(" ", "")
-        if normalized_msg in EMOTE_MAP:
-            await self.stop_user_emote(user.id)
-            task = asyncio.create_task(self.loop_emote_handler(user.id, EMOTE_MAP[normalized_msg]["id"], EMOTE_MAP[normalized_msg]["duration"]))
-            self.active_emote_loops[user.id] = {"task": task, "emote_id": EMOTE_MAP[normalized_msg]["id"]}
-            await self.respond(user, f"🎭 Now looping! Type '!stop' to end.", source)
-            return
+        # 3. Handle Emote Triggering by number
+        try:
+            emote_num = int(clean_msg.strip())
+            if emote_num in EMOTE_MAP:
+                emote = EMOTE_MAP[emote_num]
+                await self.stop_user_emote(user.id)
+                task = asyncio.create_task(self.loop_emote_handler(user.id, emote["id"], emote["duration"]))
+                self.active_emote_loops[user.id] = {"task": task, "emote_id": emote["id"]}
+                await self.respond(user, f"🎭 Looping #{emote_num} ({emote['name']})! Type '!stop' to end.", source)
+                return
+        except ValueError:
+            pass
 
         # 4. Standard Commands
         if clean_msg == "!help":
@@ -488,15 +498,15 @@ class Bot(BaseBot):
             return
 
         elif clean_msg == "!list":
-            await self.highrise.send_whisper(user.id, "💡 Just type any of these names in chat to loop the emote! Type '!stop' to cancel.")
-            emotes = list(EMOTE_MAP.keys())
+            await self.highrise.send_whisper(user.id, "💡 Type the number in chat to loop that emote! Type '!stop' to cancel.")
             current_msg = ""
-            for e in emotes:
-                if len(current_msg) + len(e) + 2 > 200:
-                    await self.highrise.send_whisper(user.id, current_msg)
-                    current_msg = e + ", "
+            for num, data in EMOTE_MAP.items():
+                entry = f"{num}.{data['name']}, "
+                if len(current_msg) + len(entry) > 200:
+                    await self.highrise.send_whisper(user.id, current_msg.rstrip(", "))
+                    current_msg = entry
                 else:
-                    current_msg += e + ", "
+                    current_msg += entry
             if current_msg:
                 await self.highrise.send_whisper(user.id, current_msg.rstrip(", "))
             return
