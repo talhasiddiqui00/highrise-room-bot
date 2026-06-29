@@ -340,7 +340,19 @@ class Bot(BaseBot):
         while True:
             await asyncio.sleep(30)
             now = time.time()
-            for user_id, data in list(self.room_stay_tracker.items()):
+            try:
+                room_users = await self.highrise.get_room_users()
+                live_user_ids = {u.id for u, _ in room_users.content}
+            except Exception:
+                continue  # Skip this cycle if we can't confirm who's in the room
+
+            for user_id in list(self.room_stay_tracker.keys()):
+                # Safety check: if user is not in the room, remove them and skip
+                if user_id not in live_user_ids:
+                    del self.room_stay_tracker[user_id]
+                    continue
+
+                data = self.room_stay_tracker[user_id]
                 elapsed_minutes = (now - data["join_time"]) / 60.0
                 if not data["hit_30m"] and elapsed_minutes >= 30.0:
                     self.room_stay_tracker[user_id]["hit_30m"] = True
@@ -570,12 +582,11 @@ class Bot(BaseBot):
             item_name = message.strip()[7:]  # preserve original casing
             try:
                 response = await self.webapi.get_items(item_name=item_name)
-                if response and hasattr(response, 'items') and response.items:
-                    await self.highrise.set_outfit([response.items[0]])
-                    await self.respond(user, f"✅ Bot is now wearing: {item_name}", source)
-                else:
-                    await self.respond(user, f"❌ Item not found: {item_name}", source)
+                print(f"[EQUIP DEBUG] Response: {response}")
+                print(f"[EQUIP DEBUG] Response type: {type(response)}")
+                await self.highrise.send_whisper(user.id, f"Debug: {str(response)[:200]}")
             except Exception as e:
+                print(f"[EQUIP ERROR] {e}")
                 await self.respond(user, f"❌ Error: {e}", source)
             return
 
