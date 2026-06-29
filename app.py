@@ -340,6 +340,7 @@ class Bot(BaseBot):
         self.tip_queue = asyncio.Queue()
         self.room_stay_tracker = {}
         self.welcome_in_progress = set()  # Prevent duplicate welcome messages
+        self.vip_guests = set()  # Users temporarily brought to VIP lounge via !bring
 
     def load_database_file(self) -> None:
         if not os.path.exists(DATA_FILE):
@@ -485,8 +486,8 @@ class Bot(BaseBot):
     async def start_announcement_loop(self) -> None:
         announcements = [
             "🎭 <color=#00FFFF><b>Having fun?</b></color> Type a number between <color=#FFA500><b>1 - 254</b></color> to perform an emote! e.g. <color=#FFD700><b>1, 2, 3</b></color> — Type <color=#FF00FF><b>!list</b></color> to see all emotes & <color=#FF0000><b>!stop</b></color> to stop! 🕺💃",
-            "💎 <color=#FFD700><b>TIP 300g+</b></color> to the Bot to become a <color=#FF0000><b>Permanent VIP</b></color>! 👑 Or <color=#00FF00><b>TIP the Jar</b></color> and DM the <color=#FF00FF><b>Owner</b></color> or <color=#00FFFF><b>MOD</b></color>! 🎁",
-            "💡 <color=#00FF00><b>Need help?</b></color> Type <color=#00FFFF><b>!help</b></color> for all commands! VIPs type <color=#FFD700><b>!vip</b></color> to teleport to the VIP lounge! 🌟"
+            "💎 <color=#FFD700><b>TIP 500g+</b></color> to the Bot to become a <color=#FF0000><b>Permanent VIP</b></color>! 👑 Or <color=#00FF00><b>TIP the Jar</b></color> and DM the <color=#FF00FF><b>Owner</b></color> or <color=#00FFFF><b>MOD</b></color>! 🎁",
+            "💡 <color=#00FF00><b>Need help?</b></color> Type <color=#00FFFF><b>!help</b></color> for all commands! VIPs type <color=#FFD700><b>!vip</b></color> to teleport to the VIP lounge & <color=#FF00FF><b>!bring @username</b></color> to invite a friend! 🌟"
         ]
         while True:
             try:
@@ -555,6 +556,7 @@ class Bot(BaseBot):
         await self.stop_user_emote(user.id)
         if user.id in self.room_stay_tracker:
             del self.room_stay_tracker[user.id]
+        self.vip_guests.discard(user.id)
 
     async def on_tip(self, sender: User, receiver: User, tip: CurrencyItem | Item) -> None:
         if sender.id == self.bot_id:
@@ -563,7 +565,7 @@ class Bot(BaseBot):
             if sender.id not in self.tip_data:
                 self.tip_data[sender.id] = {"username": sender.username, "total_tips": 0}
             self.tip_data[sender.id]['total_tips'] += tip.amount
-            if tip.amount >= 300:
+            if tip.amount >= 500:
                 if sender.id not in self.vip_users:
                     self.vip_users.append(sender.id)
                 await self.highrise.chat(f"👑 VIP PROMOTION: @{sender.username} has unlocked Lifetime VIP permissions! 🎉")
@@ -644,9 +646,10 @@ class Bot(BaseBot):
                 pass
             return
             
-        elif clean_msg == "!down" and (is_vip or is_owner):
+        elif clean_msg == "!down" and (is_vip or is_owner or user.id in self.vip_guests):
             try:
                 await self.highrise.teleport(user.id, self.ground_spawn_position)
+                self.vip_guests.discard(user.id)  # Remove guest status after going down
             except Exception:
                 pass
             return
@@ -658,6 +661,7 @@ class Bot(BaseBot):
                 for u, _ in room_users.content:
                     if u.username.lower() == target_name.lower():
                         await self.highrise.teleport(u.id, random.choice(self.vip_spawn_points))
+                        self.vip_guests.add(u.id)  # Grant guest access so !down works
                         await self.respond(user, f"✅ @{u.username} has been brought to the VIP lounge!", source)
                         return
                 await self.respond(user, "❌ User not found in the room.", source)
