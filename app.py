@@ -21,7 +21,7 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 
 ROOM_ID = "6a28b5b000b6151bd4c9641e"
 API_TOKEN = "fd250294097b09a7fd05aa523c63b77ef0b980cc28f7f09742b22d0db30b53a0"
-DATA_FILE = "/var/data/data.json"
+DATA_FILE = "./data.json"
 
 TIP_MAP = {
     "1g": "gold_bar_1", "5g": "gold_bar_5", "10g": "gold_bar_10", 
@@ -343,31 +343,14 @@ class Bot(BaseBot):
         self.vip_guests = set()  # Users temporarily brought to VIP lounge via !bring
 
     def load_database_file(self) -> None:
-        # 1. Ensure the directory path exists
-        directory = os.path.dirname(DATA_FILE)
-        if not os.path.exists(directory):
-            try:
-                os.makedirs(directory, exist_ok=True)
-            except Exception as e:
-                print(f"[MEMORY ERROR] Could not create directory {directory}: {e}")
-
-        # 2. Check if file exists, if not, create initial structure
         if not os.path.exists(DATA_FILE):
             try:
                 with open(DATA_FILE, "w") as file:
-                    initial_data = {
-                        "users": {}, 
-                        "vip_users": [], 
-                        "welcome_payouts": [], 
-                        "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}
-                    }
-                    dump(initial_data, file, indent=4)
-                print(f"[MEMORY LOG] Created fresh database at {DATA_FILE}")
+                    dump({"users": {}, "vip_users": [], "welcome_payouts": [], "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}, file)
             except Exception as e:
                 print(f"[MEMORY ERROR] Initialization failed: {e}")
                 return
 
-        # 3. Load the data
         try:
             with open(DATA_FILE, "r") as file:
                 data = load(file)
@@ -380,11 +363,6 @@ class Bot(BaseBot):
 
     def save_database_file(self) -> None:
         try:
-            # Ensure directory exists before saving (safety measure)
-            directory = os.path.dirname(DATA_FILE)
-            if not os.path.exists(directory):
-                os.makedirs(directory, exist_ok=True)
-
             data = {}
             if os.path.exists(DATA_FILE):
                 with open(DATA_FILE, "r") as file:
