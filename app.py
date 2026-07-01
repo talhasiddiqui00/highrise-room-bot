@@ -389,21 +389,22 @@ class Bot(BaseBot):
         except Exception:
             return Position(0, 0, 0, "FrontRight")
 
-    async def loop_emote_handler(self, user_id: str, emote_id: str, duration: float) -> None:
+   async def loop_emote_handler(self, user_id: str, emote_id: str, duration: float) -> None:
+        next_start = asyncio.get_running_loop().time()
         try:
-            while True:
-                if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
-                    break
+            while (
+                user_id in self.active_emote_loops
+                and self.active_emote_loops[user_id]["emote_id"] == emote_id
+            ):
+                next_start += duration + 0.15 # Compensated cycle with 0.15s buffer
                 await self.highrise.send_emote(emote_id, user_id)
-                await asyncio.sleep(duration)
+                remaining = next_start - asyncio.get_running_loop().time()
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                else:
+                    next_start = asyncio.get_running_loop().time()
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            print(f"Error in loop_emote for user {user_id}: {e}")
-            try:
-                await self.highrise.send_whisper(user_id, f"Error performing emote: {e}")
-            except Exception as e2:
-                print(f"Error sending error whisper: {e2}")
         finally:
             if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
                 del self.active_emote_loops[user_id]
