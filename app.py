@@ -21,7 +21,7 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 
 ROOM_ID = "6a28b5b000b6151bd4c9641e"
 API_TOKEN = "fd250294097b09a7fd05aa523c63b77ef0b980cc28f7f09742b22d0db30b53a0"
-DATA_FILE = "/var/data/data.json"
+DATA_FILE = "./data.json"
 
 TIP_MAP = {
     "1g": "gold_bar_1", "5g": "gold_bar_5", "10g": "gold_bar_10", 
@@ -389,22 +389,21 @@ class Bot(BaseBot):
         except Exception:
             return Position(0, 0, 0, "FrontRight")
 
-async def loop_emote_handler(self, user_id: str, emote_id: str, duration: float) -> None:
-        next_start = asyncio.get_running_loop().time()
+    async def loop_emote_handler(self, user_id: str, emote_id: str, duration: float) -> None:
         try:
-            while (
-                user_id in self.active_emote_loops
-                and self.active_emote_loops[user_id]["emote_id"] == emote_id
-            ):
-                next_start += duration + 0.15 # Compensated cycle with 0.15s buffer[cite: 1]
+            while True:
+                if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
+                    break
                 await self.highrise.send_emote(emote_id, user_id)
-                remaining = next_start - asyncio.get_running_loop().time()
-                if remaining > 0:
-                    await asyncio.sleep(remaining)
-                else:
-                    next_start = asyncio.get_running_loop().time()
+                await asyncio.sleep(duration)
         except asyncio.CancelledError:
             pass
+        except Exception as e:
+            print(f"Error in loop_emote for user {user_id}: {e}")
+            try:
+                await self.highrise.send_whisper(user_id, f"Error performing emote: {e}")
+            except Exception as e2:
+                print(f"Error sending error whisper: {e2}")
         finally:
             if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
                 del self.active_emote_loops[user_id]
