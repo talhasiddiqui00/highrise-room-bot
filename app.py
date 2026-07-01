@@ -9,6 +9,7 @@ import time
 import random
 import asyncio
 import threading
+import requests
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from json import load, dump
@@ -22,6 +23,13 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 ROOM_ID = "6a28b5b000b6151bd4c9641e"
 API_TOKEN = "fd250294097b09a7fd05aa523c63b77ef0b980cc28f7f09742b22d0db30b53a0"
 DATA_FILE = "./data.json"
+
+# --- Permanent storage via GitHub Gist (survives Render redeploys/restarts) ---
+# Set these in Render's Environment tab. If left blank, the bot falls back to
+# local-disk-only storage (the old behavior, which resets on redeploy).
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
+GIST_ID = os.environ.get("GIST_ID", "").strip()
+GIST_FILENAME = "data.json"
 
 TIP_MAP = {
     "1g": "gold_bar_1", "5g": "gold_bar_5", "10g": "gold_bar_10", 
@@ -342,24 +350,89 @@ class Bot(BaseBot):
         self.welcome_in_progress = set()  # Prevent duplicate welcome messages
         self.vip_guests = set()  # Users temporarily brought to VIP lounge via !bring
 
+    def _gist_configured(self) -> bool:
+        return bool(GITHUB_TOKEN and GIST_ID)
+
+    def _gist_headers(self) -> dict:
+        return {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github+json",
+        }
+
+    def fetch_gist_data(self):
+        """Pull the saved JSON blob from the Gist. Returns dict or None on any failure."""
+        try:
+            resp = requests.get(
+                f"https://api.github.com/gists/{GIST_ID}",
+                headers=self._gist_headers(),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            file_entry = resp.json().get("files", {}).get(GIST_FILENAME)
+            if not file_entry:
+                return None
+            content = file_entry.get("content", "")
+            if file_entry.get("truncated") and file_entry.get("raw_url"):
+                raw = requests.get(file_entry["raw_url"], timeout=10)
+                raw.raise_for_status()
+                content = raw.text
+            if not content.strip():
+                return None
+            return json.loads(content)
+        except Exception as e:
+            print(f"[GIST ERROR] Fetch failed, will fall back to local disk: {e}")
+            return None
+
+    def push_gist_data(self, data: dict) -> None:
+        """Push the full data dict up to the Gist so it survives redeploys."""
+        try:
+            payload = {"files": {GIST_FILENAME: {"content": json.dumps(data, indent=4)}}}
+            resp = requests.patch(
+                f"https://api.github.com/gists/{GIST_ID}",
+                headers=self._gist_headers(),
+                json=payload,
+                timeout=10,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            print(f"[GIST ERROR] Push failed (data is still safe on local disk this run): {e}")
+
     def load_database_file(self) -> None:
-        if not os.path.exists(DATA_FILE):
+        data = None
+
+        if self._gist_configured():
+            data = self.fetch_gist_data()
+            if data is not None:
+                print("[MEMORY LOG] Loaded Brain from GitHub Gist (permanent storage).")
+
+        if data is None:
+            # No Gist configured, or the fetch failed - fall back to local disk.
+            if not os.path.exists(DATA_FILE):
+                try:
+                    with open(DATA_FILE, "w") as file:
+                        dump({"users": {}, "vip_users": [], "extra_owners": [], "welcome_payouts": [], "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}, file)
+                except Exception as e:
+                    print(f"[MEMORY ERROR] Initialization failed: {e}")
+                    return
             try:
-                with open(DATA_FILE, "w") as file:
-                    dump({"users": {}, "vip_users": [], "welcome_payouts": [], "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}, file)
+                with open(DATA_FILE, "r") as file:
+                    data = load(file)
             except Exception as e:
-                print(f"[MEMORY ERROR] Initialization failed: {e}")
+                print(f"[MEMORY ERROR] Read failed: {e}")
                 return
 
+        self.tip_data = data.get("users", {})
+        self.vip_users = data.get("vip_users", [])
+        self.extra_owners = data.get("extra_owners", [])
+        self.welcome_payouts = data.get("welcome_payouts", [])
+        print(f"[MEMORY LOG] Loaded Brain. Tippers={len(self.tip_data)}, VIPs={len(self.vip_users)}, Owners={len(self.extra_owners)}")
+
+        # Keep the local file in sync with whatever we just loaded (useful as a fallback cache).
         try:
-            with open(DATA_FILE, "r") as file:
-                data = load(file)
-                self.tip_data = data.get("users", {})
-                self.vip_users = data.get("vip_users", [])
-                self.welcome_payouts = data.get("welcome_payouts", [])
-                print(f"[MEMORY LOG] Loaded Brain. Tippers={len(self.tip_data)}, VIPs={len(self.vip_users)}")
+            with open(DATA_FILE, "w") as file:
+                dump(data, file, indent=4)
         except Exception as e:
-            print(f"[MEMORY ERROR] Read failed: {e}")
+            print(f"[MEMORY ERROR] Local cache write failed: {e}")
 
     def save_database_file(self) -> None:
         try:
@@ -373,10 +446,14 @@ class Bot(BaseBot):
 
             data["users"] = self.tip_data
             data["vip_users"] = self.vip_users
+            data["extra_owners"] = self.extra_owners
             data["welcome_payouts"] = self.welcome_payouts
 
             with open(DATA_FILE, "w") as file:
                 dump(data, file, indent=4)
+
+            if self._gist_configured():
+                self.push_gist_data(data)
         except Exception as e:
             print(f"[MEMORY ERROR] Write failed: {e}")
 
@@ -702,6 +779,7 @@ class Bot(BaseBot):
                     if u.username.lower() == target_name:
                         if u.id not in self.extra_owners:
                             self.extra_owners.append(u.id)
+                            self.save_database_file()
                             await self.respond(user, f"✅ @{u.username} has been granted owner access!", source)
                         else:
                             await self.respond(user, f"⚠️ @{u.username} already has owner access.", source)
@@ -818,6 +896,8 @@ class Bot(BaseBot):
                     data["bot_position"] = {"x": position.x, "y": position.y, "z": position.z, "facing": position.facing}
                     with open(DATA_FILE, "w") as file:
                         dump(data, file, indent=4)
+                    if self._gist_configured():
+                        self.push_gist_data(data)
                         
                     await self.highrise.teleport(self.bot_id, position)
                     await self.respond(user, "📍 Bot position updated successfully!", source)
