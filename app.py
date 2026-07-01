@@ -391,11 +391,18 @@ class Bot(BaseBot):
 
     async def loop_emote_handler(self, user_id: str, emote_id: str, duration: float) -> None:
         try:
+            next_start = asyncio.get_running_loop().time()
             while True:
                 if user_id not in self.active_emote_loops or self.active_emote_loops[user_id]["emote_id"] != emote_id:
                     break
+                next_start += duration + 0.15  # small safety buffer so the next emote doesn't cut off the animation
                 await self.highrise.send_emote(emote_id, user_id)
-                await asyncio.sleep(duration)
+                remaining = next_start - asyncio.get_running_loop().time()
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                else:
+                    # We've fallen behind (API/network delay) - reset the schedule instead of stacking delay
+                    next_start = asyncio.get_running_loop().time()
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -421,14 +428,21 @@ class Bot(BaseBot):
 
     async def process_tip_queue_worker(self):
         while True:
-            target_id, gold_bar_tier, username, reason = await self.tip_queue.get()
+            target_id, gold_bar_tier, username, reason, amount_label = await self.tip_queue.get()
             try:
                 await self.highrise.tip_user(target_id, gold_bar_tier)
                 if reason == "welcome":
-                    await self.highrise.chat(f"🎉 @{username}, enjoy your 1g welcome bonus!")
+                    await self.highrise.chat(f"🎉 @{username}, enjoy your {amount_label} welcome bonus!")
                 elif reason == "stay_reward":
-                    await self.highrise.chat(f"⏰ @{username} received 1g for supporting the room with their stay-time! 🎉")
-                await asyncio.sleep(1.2)
+                    await self.highrise.chat(f"⏰ @{username} received {amount_label} for supporting the room with their stay-time! 🎉")
+                elif reason == "manual_tip":
+                    await self.highrise.chat(f"💰 @{username} have been tipped {amount_label}!")
+
+                if reason == "manual_tip":
+                    # Give the giveall/give tips a visible 2-3s gap so tips land one by one publicly
+                    await asyncio.sleep(random.uniform(2.0, 3.0))
+                else:
+                    await asyncio.sleep(1.2)
             except Exception as e:
                 if "closing transport" in str(e).lower() or "connection" in str(e).lower():
                     os._exit(1)
@@ -457,10 +471,10 @@ class Bot(BaseBot):
                 if not data["hit_30m"] and elapsed_minutes >= 30.0:
                     self.room_stay_tracker[user_id]["hit_30m"] = True
                     self.room_stay_tracker[user_id]["next_milestone_minutes"] = 90.0
-                    await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward"))
+                    await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward", "1g"))
                 elif data["hit_30m"] and elapsed_minutes >= data["next_milestone_minutes"]:
                     self.room_stay_tracker[user_id]["next_milestone_minutes"] += 60.0
-                    await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward"))
+                    await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward", "1g"))
 
     async def connection_watchdog_loop(self) -> None:
         while True:
@@ -542,7 +556,7 @@ class Bot(BaseBot):
             self.welcome_payouts.append(user.id)
             self.save_database_file()
             await asyncio.sleep(4.0) 
-            await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome"))
+            await self.tip_queue.put((user.id, "gold_bar_1", user.username, "welcome", "1g"))
         
         self.welcome_in_progress.discard(user.id)
 
@@ -705,7 +719,7 @@ class Bot(BaseBot):
                     count = 0
                     for u, _ in room_users.content:
                         if u.id != self.bot_id:
-                            await self.tip_queue.put((u.id, TIP_MAP[amount_str], u.username, "manual_tip"))
+                            await self.tip_queue.put((u.id, TIP_MAP[amount_str], u.username, "manual_tip", amount_str))
                             count += 1
                     await self.respond(user, f"💸 Queued {amount_str} tip to {count} users in the room!", source)
                 else:
@@ -723,7 +737,7 @@ class Bot(BaseBot):
                     room_users = await self.highrise.get_room_users()
                     for u, _ in room_users.content:
                         if u.username.lower() == target_name:
-                            await self.tip_queue.put((u.id, TIP_MAP[amount_str], u.username, "manual_tip"))
+                            await self.tip_queue.put((u.id, TIP_MAP[amount_str], u.username, "manual_tip", amount_str))
                             await self.respond(user, f"💸 Queued {amount_str} tip to @{u.username}", source)
                             return
                     await self.respond(user, "❌ User not found in the room.", source)
