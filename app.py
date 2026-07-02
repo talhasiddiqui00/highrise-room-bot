@@ -324,6 +324,7 @@ class Bot(BaseBot):
         self.owner_id = None
         self.owner_username = "sadi_key"
         self.extra_owners = []  # Users granted owner access via !giveowner
+        self.dj_access = []  # Users granted DJ booth access via !givedj
         
         # --- LOCKS TO PREVENT DUPLICATION ---
         self.is_initialized = False 
@@ -334,6 +335,8 @@ class Bot(BaseBot):
         self.tip_data = {}
         self.vip_users = []
         self.welcome_payouts = []
+        self._gist_dirty = False
+        self._gist_pending_data = None
         
         self.load_database_file()
 
@@ -343,6 +346,9 @@ class Bot(BaseBot):
             Position(27.5, 23.0, 30.0, facing="FrontRight")
         ]
         self.ground_spawn_position = Position(27.0, 0.5, 34.0, facing="FrontRight")
+        self.floor1_position = Position(26.0, 8.0, 33.0, facing="FrontRight")
+        self.floor2_position = Position(26.0, 15.5, 33.0, facing="FrontRight")
+        self.dj_booth_position = Position(19.0, 23.0, 39.0, facing="FrontRight")
 
         self.active_emote_loops = {}
         self.tip_queue = asyncio.Queue()
@@ -410,7 +416,7 @@ class Bot(BaseBot):
             if not os.path.exists(DATA_FILE):
                 try:
                     with open(DATA_FILE, "w") as file:
-                        dump({"users": {}, "vip_users": [], "extra_owners": [], "welcome_payouts": [], "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}, file)
+                        dump({"users": {}, "vip_users": [], "extra_owners": [], "dj_access": [], "welcome_payouts": [], "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}, file)
                 except Exception as e:
                     print(f"[MEMORY ERROR] Initialization failed: {e}")
                     return
@@ -424,6 +430,7 @@ class Bot(BaseBot):
         self.tip_data = data.get("users", {})
         self.vip_users = data.get("vip_users", [])
         self.extra_owners = data.get("extra_owners", [])
+        self.dj_access = data.get("dj_access", [])
         self.welcome_payouts = data.get("welcome_payouts", [])
         print(f"[MEMORY LOG] Loaded Brain. Tippers={len(self.tip_data)}, VIPs={len(self.vip_users)}, Owners={len(self.extra_owners)}")
 
@@ -447,15 +454,40 @@ class Bot(BaseBot):
             data["users"] = self.tip_data
             data["vip_users"] = self.vip_users
             data["extra_owners"] = self.extra_owners
+            data["dj_access"] = self.dj_access
             data["welcome_payouts"] = self.welcome_payouts
 
             with open(DATA_FILE, "w") as file:
                 dump(data, file, indent=4)
 
             if self._gist_configured():
-                self.push_gist_data(data)
+                self.queue_gist_push(data)
         except Exception as e:
             print(f"[MEMORY ERROR] Write failed: {e}")
+
+    def queue_gist_push(self, data: dict) -> None:
+        # Don't hit the GitHub API synchronously from inside event handlers -
+        # that blocks the event loop and can cause the bot to miss the
+        # Highrise connection's keepalive, leading to disconnects. Instead we
+        # stash the latest data and let gist_sync_loop push it in a thread,
+        # coalescing rapid back-to-back saves (e.g. a burst of tips) into a
+        # single request instead of one per event.
+        self._gist_pending_data = data
+        self._gist_dirty = True
+
+    async def gist_sync_loop(self) -> None:
+        while True:
+            await asyncio.sleep(5)
+            if not self._gist_configured() or not self._gist_dirty:
+                continue
+            data_to_push = self._gist_pending_data
+            self._gist_dirty = False
+            try:
+                await asyncio.to_thread(self.push_gist_data, data_to_push)
+            except Exception as e:
+                print(f"[GIST ERROR] Sync loop push failed, will retry: {e}")
+                self._gist_pending_data = data_to_push
+                self._gist_dirty = True
 
     def get_bot_position(self) -> Position:
         try:
@@ -574,37 +606,77 @@ class Bot(BaseBot):
             except Exception:
                 pass
 
+    async def bot_position_watchdog_loop(self):
+        # Periodically confirms the bot is still where it was placed via !set.
+        # If Highrise ever resets it back to the room's default spawn point
+        # (e.g. after a reconnect glitch), this teleports it back automatically.
+        while True:
+            await asyncio.sleep(60)
+            try:
+                saved_pos = self.get_bot_position()
+                if saved_pos == Position(0, 0, 0, 'FrontRight'):
+                    continue  # No custom position configured yet
+
+                room_users = await self.highrise.get_room_users()
+                current_pos = None
+                for u, pos in room_users.content:
+                    if u.id == self.bot_id:
+                        current_pos = pos
+                        break
+
+                if not isinstance(current_pos, Position):
+                    continue
+
+                drifted = (
+                    abs(current_pos.x - saved_pos.x) > 1.0
+                    or abs(current_pos.y - saved_pos.y) > 1.0
+                    or abs(current_pos.z - saved_pos.z) > 1.0
+                )
+                if drifted:
+                    await self.highrise.teleport(self.bot_id, saved_pos)
+            except Exception:
+                pass
+
     async def start_announcement_loop(self) -> None:
         announcements = [
-            "🎭 <color=#00FFFF><b>Having fun?</b></color> Type a number between <color=#FFA500><b>1 - 254</b></color> to perform an emote! e.g. <color=#FFD700><b>1, 2, 3</b></color> — Type <color=#FF00FF><b>!list</b></color> to see all emotes & <color=#FF0000><b>!stop</b></color> to stop! 🕺💃",
-            "💎 <color=#FFD700><b>TIP 500g+</b></color> to the Bot to become a <color=#FF0000><b>Permanent VIP</b></color>! 👑 Or <color=#00FF00><b>TIP the Jar</b></color> and DM the <color=#FF00FF><b>Owner</b></color> or <color=#00FFFF><b>MOD</b></color>! 🎁",
-            "💡 <color=#00FF00><b>Need help?</b></color> Type <color=#00FFFF><b>!help</b></color> for all commands! VIPs type <color=#FFD700><b>!vip</b></color> to teleport to the VIP lounge! 🌟"
+            "🎭 <color=#00FFFF><b>Having fun?</b></color> Type a number between <color=#FFA500><b>1</b></color> to <color=#FFA500><b>254</b></color> to perform an emote! <color=#FF00FF><b>!list</b></color> for emotes list and <color=#FF0000><b>!stop</b></color> to stop the emote. <color=#FFD700><b>F1</b></color> 🕺💃",
+            "💎 <color=#FFD700><b>TIP 500g</b></color> to the jar for <color=#FF0000><b>Perm VIP</b></color>! 👑 Or <color=#00FF00><b>TIP the jar</b></color> and DM the <color=#FF00FF><b>Owner</b></color> or <color=#00FFFF><b>MOD</b></color>! 🎁",
+            "🛡️ <color=#00FFFF><b>We need active MODs.</b></color> Interested? DM <color=#FFD700><b>@sadi_key</b></color> 📩"
         ]
+        last_announcement = None
         while True:
             try:
                 room_users = await self.highrise.get_room_users()
                 if room_users and len(room_users.content) > 1:
-                    await self.highrise.chat(random.choice(announcements))
-                await asyncio.sleep(90) # Announcements every 90 seconds
+                    choices = [a for a in announcements if a != last_announcement] or announcements
+                    pick = random.choice(choices)
+                    last_announcement = pick
+                    await self.highrise.chat(pick)
+                await asyncio.sleep(60)  # Announcements every 1 minute
             except Exception:
                 await asyncio.sleep(10)
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
-        # Prevent SDK reconnects from duplicating background tasks
-        if self.is_initialized:
-            return
-            
         print("Management Bot Connected")
         self.bot_id = session_metadata.user_id
         self.owner_id = session_metadata.room_info.owner_id
+
+        # Reposition the bot on every connect AND every reconnect. Highrise
+        # places a rejoining bot at the room's default spawn point, so
+        # without this the bot drifts back there after any disconnect.
+        asyncio.create_task(self.place_bot())
+
+        # Prevent SDK reconnects from duplicating background tasks
+        if self.is_initialized:
+            return
         self.is_initialized = True
-        
-        await self.place_bot()
         
         asyncio.create_task(self.process_tip_queue_worker())
         asyncio.create_task(self.track_user_stay_durations_loop())
         asyncio.create_task(self.connection_watchdog_loop())
         asyncio.create_task(self.anti_idle_loop())
+        asyncio.create_task(self.bot_position_watchdog_loop())
+        asyncio.create_task(self.gist_sync_loop())
         
         # Start announcement loop safely
         if self.announcement_task is None or self.announcement_task.done():
@@ -612,12 +684,15 @@ class Bot(BaseBot):
 
     async def place_bot(self):
         await asyncio.sleep(2.0)
-        try:
-            pos = self.get_bot_position()
-            if pos != Position(0, 0, 0, 'FrontRight'):
+        pos = self.get_bot_position()
+        if pos == Position(0, 0, 0, 'FrontRight'):
+            return  # No custom position saved yet - leave the bot at the room's default spawn
+        for attempt in range(5):
+            try:
                 await self.highrise.teleport(self.bot_id, pos)
-        except Exception:
-            pass
+                return
+            except Exception:
+                await asyncio.sleep(2.0)
 
     async def handle_welcome_flow(self, user: User):
         if user.id in self.welcome_in_progress:
@@ -706,9 +781,9 @@ class Bot(BaseBot):
 
         # 4. Standard Commands
         if clean_msg == "!help":
-            help_text = "⚡ Commands: !list | !stop | !vip | !down | !bring @username"
+            help_text = "⚡ Commands: !list | !stop | !vip | !down | !bring @username | F1 | F2 | !dj"
             if is_owner:
-                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner"
+                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner | !givedj"
             await self.respond(user, help_text, source)
             return
 
@@ -767,6 +842,27 @@ class Bot(BaseBot):
                 pass
             return
 
+        elif clean_msg == "f1":
+            try:
+                await self.highrise.teleport(user.id, self.floor1_position)
+            except Exception:
+                pass
+            return
+
+        elif clean_msg == "f2":
+            try:
+                await self.highrise.teleport(user.id, self.floor2_position)
+            except Exception:
+                pass
+            return
+
+        elif clean_msg == "!dj" and (user.id in self.dj_access or is_owner):
+            try:
+                await self.highrise.teleport(user.id, self.dj_booth_position)
+            except Exception:
+                pass
+            return
+
         # --- EVERYTHING BELOW THIS LINE IS OWNER ONLY ---
         if not is_owner:
             return
@@ -787,6 +883,24 @@ class Bot(BaseBot):
                 await self.respond(user, "❌ User not found in the room.", source)
             except IndexError:
                 await self.respond(user, "❌ Invalid format. Use: !giveowner @username", source)
+            return
+
+        elif clean_msg.startswith("!givedj "):
+            try:
+                target_name = clean_msg.split("@")[1].strip()
+                room_users = await self.highrise.get_room_users()
+                for u, _ in room_users.content:
+                    if u.username.lower() == target_name:
+                        if u.id not in self.dj_access:
+                            self.dj_access.append(u.id)
+                            self.save_database_file()
+                            await self.highrise.chat(f"🎧 @{u.username} has unlocked DJ booth access!")
+                        else:
+                            await self.respond(user, f"⚠️ @{u.username} already has DJ access.", source)
+                        return
+                await self.respond(user, "❌ User not found in the room.", source)
+            except IndexError:
+                await self.respond(user, "❌ Invalid format. Use: !givedj @username", source)
             return
 
         elif clean_msg.startswith("!giveall "):
@@ -897,7 +1011,7 @@ class Bot(BaseBot):
                     with open(DATA_FILE, "w") as file:
                         dump(data, file, indent=4)
                     if self._gist_configured():
-                        self.push_gist_data(data)
+                        self.queue_gist_push(data)
                         
                     await self.highrise.teleport(self.bot_id, position)
                     await self.respond(user, "📍 Bot position updated successfully!", source)
