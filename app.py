@@ -639,9 +639,10 @@ class Bot(BaseBot):
 
     async def start_announcement_loop(self) -> None:
         announcements = [
-            "🎭 <color=#00FFFF><b>Having fun?</b></color> Type a number between <color=#FFA500><b>1</b></color> to <color=#FFA500><b>254</b></color> to perform an emote! <color=#FF00FF><b>!list</b></color> for emotes list and <color=#FF0000><b>!stop</b></color> to stop the emote. <color=#FFD700><b>F1</b></color> 🕺💃",
+            "🎭 <color=#00FFFF><b>Having fun?</b></color> Type a number between <color=#FFA500><b>1</b></color> to <color=#FFA500><b>254</b></color> to perform an emote! <color=#FF00FF><b>!list</b></color> for emotes list and <color=#FF0000><b>!stop</b></color> to stop the emote. 🕺💃",
             "💎 <color=#FFD700><b>TIP 500g</b></color> to the jar for <color=#FF0000><b>Perm VIP</b></color>! 👑 Or <color=#00FF00><b>TIP the jar</b></color> and DM the <color=#FF00FF><b>Owner</b></color> or <color=#00FFFF><b>MOD</b></color>! 🎁",
-            "🛡️ <color=#00FFFF><b>We need active MODs.</b></color> Interested? DM <color=#FFD700><b>@sadi_key</b></color> 📩"
+            "🛡️ <color=#00FFFF><b>We need active MODs.</b></color> Interested? DM <color=#FFD700><b>@sadi_key</b></color> 📩",
+            "🏢 To teleport to <color=#00FFFF><b>1st floor</b></color> type <color=#FFD700><b>F1</b></color>! For <color=#00FFFF><b>2nd floor</b></color> type <color=#FFD700><b>F2</b></color>! 🚀"
         ]
         last_announcement = None
         while True:
