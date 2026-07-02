@@ -461,7 +461,18 @@ class Bot(BaseBot):
                 dump(data, file, indent=4)
 
             if self._gist_configured():
-                self.queue_gist_push(data)
+                # Only push Tippers/VIPs/Owners/DJs (+ bot position) to the Gist.
+                # welcome_payouts is just "every user who ever joined" and isn't
+                # needed permanently - keeping it out keeps the Gist small and
+                # avoids it growing unbounded over time.
+                gist_payload = {
+                    "users": self.tip_data,
+                    "vip_users": self.vip_users,
+                    "extra_owners": self.extra_owners,
+                    "dj_access": self.dj_access,
+                    "bot_position": data.get("bot_position", {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}),
+                }
+                self.queue_gist_push(gist_payload)
         except Exception as e:
             print(f"[MEMORY ERROR] Write failed: {e}")
 
@@ -784,7 +795,7 @@ class Bot(BaseBot):
         if clean_msg == "!help":
             help_text = "⚡ Commands: !list | !stop | !vip | !down | !bring @username | F1 | F2 | !dj"
             if is_owner:
-                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner | !givedj"
+                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner | !givedj | !removedj"
             await self.respond(user, help_text, source)
             return
 
@@ -904,6 +915,24 @@ class Bot(BaseBot):
                 await self.respond(user, "❌ Invalid format. Use: !givedj @username", source)
             return
 
+        elif clean_msg.startswith("!removedj "):
+            try:
+                target_name = clean_msg.split("@")[1].strip()
+                room_users = await self.highrise.get_room_users()
+                for u, _ in room_users.content:
+                    if u.username.lower() == target_name:
+                        if u.id in self.dj_access:
+                            self.dj_access.remove(u.id)
+                            self.save_database_file()
+                            await self.respond(user, f"🚫 @{u.username} has had their DJ access revoked.", source)
+                        else:
+                            await self.respond(user, f"⚠️ @{u.username} does not have DJ access.", source)
+                        return
+                await self.respond(user, "❌ User not found in the room.", source)
+            except IndexError:
+                await self.respond(user, "❌ Invalid format. Use: !removedj @username", source)
+            return
+
         elif clean_msg.startswith("!giveall "):
             try:
                 amount_str = clean_msg.split(" ")[1].strip()
@@ -1012,7 +1041,14 @@ class Bot(BaseBot):
                     with open(DATA_FILE, "w") as file:
                         dump(data, file, indent=4)
                     if self._gist_configured():
-                        self.queue_gist_push(data)
+                        gist_payload = {
+                            "users": self.tip_data,
+                            "vip_users": self.vip_users,
+                            "extra_owners": self.extra_owners,
+                            "dj_access": self.dj_access,
+                            "bot_position": data["bot_position"],
+                        }
+                        self.queue_gist_push(gist_payload)
                         
                     await self.highrise.teleport(self.bot_id, position)
                     await self.respond(user, "📍 Bot position updated successfully!", source)
