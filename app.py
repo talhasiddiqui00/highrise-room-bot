@@ -564,8 +564,7 @@ class Bot(BaseBot):
                 else:
                     await asyncio.sleep(1.2)
             except Exception as e:
-                if "closing transport" in str(e).lower() or "connection" in str(e).lower():
-                    os._exit(1)
+                print(f"[TIP ERROR] Failed to tip {username} ({target_id}): {e}")
                 await asyncio.sleep(2.0)
             finally:
                 self.tip_queue.task_done()
