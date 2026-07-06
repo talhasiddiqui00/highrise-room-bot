@@ -835,7 +835,7 @@ class Bot(BaseBot):
                 pass
             return
             
-        elif clean_msg == "!down" and (is_vip or is_owner or user.id in self.vip_guests):
+        elif clean_msg == "!down":
             try:
                 await self.highrise.teleport(user.id, self.ground_spawn_position)
                 self.vip_guests.discard(user.id)  # Remove guest status after going down
