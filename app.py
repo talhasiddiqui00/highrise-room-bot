@@ -37,6 +37,17 @@ TIP_MAP = {
     "1k": "gold_bar_1k", "5k": "gold_bar_5k", "10k": "gold_bar_10k"
 }
 
+# Regular tipping (!give / !giveall / auto-tips) is capped at 100g max.
+TIP_ALLOWED = {"1g", "5g", "10g", "50g", "100g"}
+
+# !withdraw accepts larger denominations, with a few common ways of writing them.
+WITHDRAW_ALIASES = {
+    "500": "500g", "500g": "500g",
+    "1k": "1k", "1kg": "1k",
+    "5k": "5k", "5kg": "5k",
+    "10k": "10k", "10kg": "10k",
+}
+
 
 
 EMOTE_MAP = {
@@ -323,7 +334,7 @@ class Bot(BaseBot):
         self.bot_id = None
         self.owner_id = None
         self.owner_username = "sadi_key"
-        self.extra_owners = []  # Users granted owner access via !giveowner
+        self.extra_owners = {}  # Users granted owner access via !giveowner (id -> username)
         self.dj_access = []  # Users granted DJ booth access via !givedj
         
         # --- LOCKS TO PREVENT DUPLICATION ---
@@ -416,7 +427,7 @@ class Bot(BaseBot):
             if not os.path.exists(DATA_FILE):
                 try:
                     with open(DATA_FILE, "w") as file:
-                        dump({"users": {}, "vip_users": [], "extra_owners": [], "dj_access": [], "welcome_payouts": [], "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}, file)
+                        dump({"users": {}, "vip_users": [], "extra_owners": {}, "dj_access": [], "welcome_payouts": [], "bot_position": {"x": 0, "y": 0, "z": 0, "facing": "FrontRight"}}, file)
                 except Exception as e:
                     print(f"[MEMORY ERROR] Initialization failed: {e}")
                     return
@@ -429,7 +440,12 @@ class Bot(BaseBot):
 
         self.tip_data = data.get("users", {})
         self.vip_users = data.get("vip_users", [])
-        self.extra_owners = data.get("extra_owners", [])
+        raw_owners = data.get("extra_owners", [])
+        if isinstance(raw_owners, dict):
+            self.extra_owners = raw_owners
+        else:
+            # Migrate from the old list-of-ids format to id->username
+            self.extra_owners = {uid: self.tip_data.get(uid, {}).get("username", "Unknown") for uid in raw_owners}
         self.dj_access = data.get("dj_access", [])
         self.welcome_payouts = data.get("welcome_payouts", [])
         print(f"[MEMORY LOG] Loaded Brain. Tippers={len(self.tip_data)}, VIPs={len(self.vip_users)}, Owners={len(self.extra_owners)}")
@@ -552,9 +568,9 @@ class Bot(BaseBot):
             try:
                 await self.highrise.tip_user(target_id, gold_bar_tier)
                 if reason == "welcome":
-                    await self.highrise.chat(f"🎉 @{username}, enjoy your {amount_label} welcome bonus!")
+                    await self.highrise.chat(f"🎉 @{username} have been tipped {amount_label} for welcome bonus!")
                 elif reason == "stay_reward":
-                    await self.highrise.chat(f"⏰ @{username} received {amount_label} for supporting the room with their stay-time! 🎉")
+                    await self.highrise.chat(f"⏰ @{username} have been tipped {amount_label} for staying bonus!")
                 elif reason == "manual_tip":
                     await self.highrise.chat(f"💰 @{username} have been tipped {amount_label}!")
 
@@ -587,12 +603,10 @@ class Bot(BaseBot):
 
                 data = self.room_stay_tracker[user_id]
                 elapsed_minutes = (now - data["join_time"]) / 60.0
-                if not data["hit_30m"] and elapsed_minutes >= 30.0:
-                    self.room_stay_tracker[user_id]["hit_30m"] = True
-                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = 90.0
-                    await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward", "1g"))
-                elif data["hit_30m"] and elapsed_minutes >= data["next_milestone_minutes"]:
-                    self.room_stay_tracker[user_id]["next_milestone_minutes"] += 60.0
+                if elapsed_minutes >= data["next_milestone_minutes"]:
+                    reached = data["next_milestone_minutes"]
+                    increment = 15.0 if reached >= 90.0 else 10.0
+                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = reached + increment
                     await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward", "1g"))
 
     async def connection_watchdog_loop(self) -> None:
@@ -726,7 +740,7 @@ class Bot(BaseBot):
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
         if user.id == self.bot_id or "bot" in user.username.lower():
             return
-        self.room_stay_tracker[user.id] = {"username": user.username, "join_time": time.time(), "hit_30m": False, "next_milestone_minutes": 30.0}
+        self.room_stay_tracker[user.id] = {"username": user.username, "join_time": time.time(), "next_milestone_minutes": 5.0}
         asyncio.create_task(self.handle_welcome_flow(user))
 
     async def on_user_leave(self, user: User) -> None:
@@ -794,7 +808,7 @@ class Bot(BaseBot):
         if clean_msg == "!help":
             help_text = "⚡ Commands: !list | !stop | !vip | !down | !bring @username | F1 | F2 | !dj"
             if is_owner:
-                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner | !givedj | !removedj"
+                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner | !removeowner | !allowners | !givedj | !removedj | !withdraw"
             await self.respond(user, help_text, source)
             return
 
@@ -885,7 +899,7 @@ class Bot(BaseBot):
                 for u, _ in room_users.content:
                     if u.username.lower() == target_name:
                         if u.id not in self.extra_owners:
-                            self.extra_owners.append(u.id)
+                            self.extra_owners[u.id] = u.username
                             self.save_database_file()
                             await self.respond(user, f"✅ @{u.username} has been granted owner access!", source)
                         else:
@@ -894,6 +908,43 @@ class Bot(BaseBot):
                 await self.respond(user, "❌ User not found in the room.", source)
             except IndexError:
                 await self.respond(user, "❌ Invalid format. Use: !giveowner @username", source)
+            return
+
+        elif clean_msg.startswith("!removeowner ") and user.username.lower() == self.owner_username.lower():
+            try:
+                target_name = clean_msg.split("@")[1].strip()
+                room_users = await self.highrise.get_room_users()
+                for u, _ in room_users.content:
+                    if u.username.lower() == target_name:
+                        if u.id in self.extra_owners:
+                            del self.extra_owners[u.id]
+                            self.save_database_file()
+                            await self.respond(user, f"🚫 @{u.username} has had their owner access revoked.", source)
+                        else:
+                            await self.respond(user, f"⚠️ @{u.username} does not have owner access.", source)
+                        return
+                await self.respond(user, "❌ User not found in the room.", source)
+            except IndexError:
+                await self.respond(user, "❌ Invalid format. Use: !removeowner @username", source)
+            return
+
+        elif clean_msg == "!allowners":
+            owner_names = [self.owner_username] + list(self.extra_owners.values())
+            owners_string = ", ".join(f"@{n}" for n in owner_names)
+            await self.highrise.send_whisper(user.id, f"👑 Total Owners ({len(owner_names)}): {owners_string}")
+            return
+
+        elif clean_msg.startswith("!withdraw ") and user.username.lower() == self.owner_username.lower():
+            try:
+                amount_str = clean_msg.split(" ")[1].strip()
+                normalized = WITHDRAW_ALIASES.get(amount_str)
+                if normalized and normalized in TIP_MAP:
+                    await self.highrise.tip_user(user.id, TIP_MAP[normalized])
+                    await self.respond(user, f"✅ Withdrew {normalized} from the bot to your account.", source)
+                else:
+                    await self.respond(user, "❌ Incorrect amount. Use: !withdraw 500, 1kg, 5kg, or 10kg.", source)
+            except IndexError:
+                await self.respond(user, "❌ Invalid format. Use: !withdraw 500", source)
             return
 
         elif clean_msg.startswith("!givedj "):
@@ -935,7 +986,7 @@ class Bot(BaseBot):
         elif clean_msg.startswith("!giveall "):
             try:
                 amount_str = clean_msg.split(" ")[1].strip()
-                if amount_str in TIP_MAP:
+                if amount_str in TIP_ALLOWED:
                     room_users = await self.highrise.get_room_users()
                     count = 0
                     for u, _ in room_users.content:
@@ -944,7 +995,7 @@ class Bot(BaseBot):
                             count += 1
                     await self.respond(user, f"💸 Queued {amount_str} tip to {count} users in the room!", source)
                 else:
-                    await self.respond(user, "❌ Invalid amount. Use 1g, 5g, 10g, 50g, 100g, 500g, 1k, 5k, or 10k.", source)
+                    await self.respond(user, "❌ Incorrect command, you can tip max till 100g.", source)
             except IndexError:
                 await self.respond(user, "❌ Invalid format. Use: !giveall 10g", source)
             return
@@ -954,7 +1005,7 @@ class Bot(BaseBot):
             if len(parts) >= 3:
                 target_name = parts[1].replace("@", "")
                 amount_str = parts[2]
-                if amount_str in TIP_MAP:
+                if amount_str in TIP_ALLOWED:
                     room_users = await self.highrise.get_room_users()
                     for u, _ in room_users.content:
                         if u.username.lower() == target_name:
@@ -963,7 +1014,7 @@ class Bot(BaseBot):
                             return
                     await self.respond(user, "❌ User not found in the room.", source)
                 else:
-                    await self.respond(user, "❌ Invalid amount. Use 1g, 5g, 10g, 50g, 100g, 500g, 1k, 5k, or 10k.", source)
+                    await self.respond(user, "❌ Incorrect command, you can tip max till 100g.", source)
             else:
                 await self.respond(user, "❌ Invalid format. Use: !give @username 10g", source)
             return
