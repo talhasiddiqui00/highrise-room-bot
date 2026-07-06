@@ -604,9 +604,7 @@ class Bot(BaseBot):
                 data = self.room_stay_tracker[user_id]
                 elapsed_minutes = (now - data["join_time"]) / 60.0
                 if elapsed_minutes >= data["next_milestone_minutes"]:
-                    reached = data["next_milestone_minutes"]
-                    increment = 15.0 if reached >= 90.0 else 10.0
-                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = reached + increment
+                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = data["next_milestone_minutes"] + 5.0
                     await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward", "1g"))
 
     async def connection_watchdog_loop(self) -> None:
