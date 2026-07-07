@@ -856,14 +856,15 @@ class Bot(BaseBot):
         # Public reminder woven into the regular announcement rotation, showing
         # how much time is left until the next hourly trivia question.
         if self.trivia_active:
-            return "🧠 A <color=#FFD700><b>Trivia</b></color> question is live right now! Type the exact answer to win <color=#FFD700><b>50g</b></color>! 🏆"
+            return "🧠 A <color=#FFD700><b>Trivia</b></color> question is live right now! There's a chance to win <color=#FFD700><b>FREE GOLD</b></color> - type the EXACT correct answer to win <color=#FFD700><b>50g</b></color>! 🏆"
         if self.trivia_next_question_at is None:
-            return "🧠 Hourly <color=#FFD700><b>Trivia</b></color> questions are coming - answer first to win <color=#FFD700><b>50g</b></color>! 🏆"
+            return "🧠 Hourly <color=#FFD700><b>Trivia</b></color> questions are coming - there's a chance to win <color=#FFD700><b>FREE GOLD</b></color> by answering first in the EXACT format shown! 🏆"
         remaining_seconds = self.trivia_next_question_at - asyncio.get_running_loop().time()
         minutes_left = max(0, round(remaining_seconds / 60))
         return (
-            f"🧠 Next <color=#FFD700><b>Trivia</b></color> question will be here in about "
-            f"<color=#FFD700><b>{minutes_left} min</b></color> - so be ready to win the prize! 🏆"
+            f"🧠 Get ready! Next <color=#FFD700><b>Trivia</b></color> question will be here in about "
+            f"<color=#FFD700><b>{minutes_left} min</b></color> - there's a chance to win <color=#FFD700><b>FREE GOLD</b></color> "
+            f"by answering with the EXACT correct option! 🏆"
         )
 
     def _pick_trivia_question(self) -> dict:
@@ -917,7 +918,8 @@ class Bot(BaseBot):
                             room_users = await self.highrise.get_room_users()
                             if room_users and len(room_users.content) > 1:
                                 await self.highrise.chat(
-                                    f"⏳ Get ready! Next 🧠 <b>Trivia</b> question in about <color=#FFD700><b>{mark} min</b></color> - answer first to win 50g! 🏆"
+                                    f"⏳ Get ready! Next 🧠 <b>Trivia</b> question in about <color=#FFD700><b>{mark} min</b></color> - "
+                                    f"there's a chance to win <color=#FFD700><b>FREE GOLD</b></color> by answering with the EXACT correct option! 🏆"
                                 )
                         except Exception as e:
                             print(f"[TRIVIA ERROR] Reminder failed: {e}")
@@ -956,7 +958,10 @@ class Bot(BaseBot):
             return
 
         try:
-            await self.highrise.chat("🧠 Get ready! A <color=#FFD700><b>Trivia</b></color> question will be here in <b>1 min</b>! 🏆")
+            await self.highrise.chat(
+                "🧠 Get ready! A <color=#FFD700><b>Trivia</b></color> question will be here in <b>1 min</b>! "
+                "There's a chance to win <color=#FFD700><b>FREE GOLD</b></color> by answering with the EXACT correct option! 🏆"
+            )
         except Exception as e:
             print(f"[TRIVIA ERROR] Manual warmup announcement failed: {e}")
 
@@ -974,14 +979,14 @@ class Bot(BaseBot):
 
         try:
             await self.highrise.chat(
-                self._format_trivia_announcement(question) + "\n⏱️ You have <b>2 minutes</b> to answer!"
+                self._format_trivia_announcement(question) + "\n⏱️ You have <b>1 minute</b> to answer!"
             )
         except Exception as e:
             print(f"[TRIVIA ERROR] Manual question post failed: {e}")
 
-        # 2-minute answer window - ends early the moment someone answers correctly
+        # 1-minute (60s) answer window - ends early the moment someone answers correctly
         # (command_handler sets trivia_active to False as soon as a winner is found).
-        for _ in range(120):
+        for _ in range(60):
             if not self.trivia_active:
                 break
             await asyncio.sleep(1)
