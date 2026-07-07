@@ -542,11 +542,10 @@ class Bot(BaseBot):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"Error in loop_emote for user {user_id}: {e}")
-            try:
-                await self.highrise.send_whisper(user_id, f"Error performing emote: {e}")
-            except Exception as e2:
-                print(f"Error sending error whisper: {e2}")
+            # Connection-related failures happen in bursts during a reconnect - logging is
+            # enough here. Trying to whisper the user would just fail too (same dead socket)
+            # and add noise without ever reaching them.
+            print(f"[EMOTE ERROR] Loop failed for user {user_id}: {e}")
         finally:
             if user_id in self.active_emote_loops and self.active_emote_loops[user_id]["emote_id"] == emote_id:
                 del self.active_emote_loops[user_id]
@@ -562,6 +561,14 @@ class Bot(BaseBot):
             if user_id in self.active_emote_loops:
                 del self.active_emote_loops[user_id]
 
+    async def start_emote_loop_for_user(self, user_id: str, emote_id: str, duration: float, source: str) -> None:
+        # source is "personal" (the user picked it themselves) or "mass" (triggered by
+        # !allemote). A personal choice always overrides a mass loop for that user, and
+        # !allstop only ever cancels "mass" loops, leaving personal choices running.
+        await self.stop_user_emote(user_id)
+        task = asyncio.create_task(self.loop_emote_handler(user_id, emote_id, duration))
+        self.active_emote_loops[user_id] = {"task": task, "emote_id": emote_id, "source": source}
+
     async def process_tip_queue_worker(self):
         while True:
             target_id, gold_bar_tier, username, reason, amount_label = await self.tip_queue.get()
@@ -574,11 +581,9 @@ class Bot(BaseBot):
                 elif reason == "manual_tip":
                     await self.highrise.chat(f"💰 @{username} have been tipped {amount_label}!")
 
-                if reason == "manual_tip":
-                    # Give the giveall/give tips a visible 2-3s gap so tips land one by one publicly
-                    await asyncio.sleep(random.uniform(2.0, 3.0))
-                else:
-                    await asyncio.sleep(1.2)
+                # Every tip - welcome, stay bonus, or manual - gets a visible 4-5s gap
+                # so they always land one by one publicly, never in a rapid burst.
+                await asyncio.sleep(random.uniform(4.0, 5.0))
             except Exception as e:
                 print(f"[TIP ERROR] Failed to tip {username} ({target_id}): {e}")
                 await asyncio.sleep(2.0)
@@ -604,17 +609,27 @@ class Bot(BaseBot):
                 data = self.room_stay_tracker[user_id]
                 elapsed_minutes = (now - data["join_time"]) / 60.0
                 if elapsed_minutes >= data["next_milestone_minutes"]:
-                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = data["next_milestone_minutes"] + 5.0
+                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = data["next_milestone_minutes"] + 10.0
                     await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward", "1g"))
 
     async def connection_watchdog_loop(self) -> None:
+        consecutive_failures = 0
         while True:
             await asyncio.sleep(45)
             try:
                 await self.highrise.get_wallet()
+                consecutive_failures = 0  # Connection is healthy again - reset the counter
             except Exception as e:
                 if "closing transport" in str(e).lower() or "timeout" in str(e).lower():
-                    os._exit(1)
+                    consecutive_failures += 1
+                    print(f"[CONNECTION WATCHDOG] Health check failed ({consecutive_failures}/3): {e}")
+                    # Require 3 consecutive failures (~2+ minutes) before restarting the
+                    # whole process. A single failed check is often just the SDK's own
+                    # reconnect logic already in progress - killing the process on the
+                    # first blip was causing unnecessary full restarts.
+                    if consecutive_failures >= 3:
+                        print("[CONNECTION WATCHDOG] Connection appears truly dead - restarting process.")
+                        os._exit(1)
 
     async def anti_idle_loop(self):
         while True:
@@ -661,23 +676,32 @@ class Bot(BaseBot):
 
     async def start_announcement_loop(self) -> None:
         announcements = [
-            "🎭 <color=#00FFFF><b>Having fun?</b></color> Type a number between <color=#FFA500><b>1</b></color> to <color=#FFA500><b>254</b></color> to perform an emote! <color=#FF00FF><b>!list</b></color> for emotes list and <color=#FF0000><b>!stop</b></color> to stop the emote. 🕺💃",
-            "💎 <color=#FFD700><b>TIP 500g</b></color> to the jar for <color=#FF0000><b>Perm VIP</b></color>! 👑 Or <color=#00FF00><b>TIP the jar</b></color> and DM the <color=#FF00FF><b>Owner</b></color> or <color=#00FFFF><b>MOD</b></color>! 🎁",
-            "🛡️ <color=#00FFFF><b>We need active MODs.</b></color> Interested? DM <color=#FFD700><b>@sadi_key</b></color> 📩",
-            "🏢 To teleport to <color=#00FFFF><b>1st floor</b></color> type <color=#FFD700><b>F1</b></color>! For <color=#00FFFF><b>2nd floor</b></color> type <color=#FFD700><b>F2</b></color>! 🚀"
+            "💎 <color=#FFD700><b>TIP 500g</b></color> to the bot to unlock <color=#FF0000><b>VIP access permanently</b></color>! 👑",
+            "🏢 Type <color=#FFD700><b>F1</b></color> for 1st floor, <color=#FFD700><b>F2</b></color> for 2nd floor, <color=#FFD700><b>!down</b></color> for ground floor, and <color=#FFD700><b>!vip</b></color> to teleport to the VIP lounge! 🚀",
+            "🛡️ <color=#00FFFF><b>We are hiring active MODs!</b></color> Interested? DM <color=#FFD700><b>@sadi_key</b></color> 📩",
+            "🎭 Type a number between <color=#FFA500><b>1</b></color> and <color=#FFA500><b>254</b></color> to perform an emote! <color=#FF0000><b>!stop</b></color> to stop the emote loop. 🕺💃"
         ]
-        last_announcement = None
+        index = 0
+        next_start = asyncio.get_running_loop().time()
         while True:
+            # Drift-proof scheduling: the announcement is always attempted on
+            # its own 60s clock, regardless of how long get_room_users()/chat()
+            # take, so it never gets pushed back by other bot activity.
+            next_start += 60.0
             try:
                 room_users = await self.highrise.get_room_users()
                 if room_users and len(room_users.content) > 1:
-                    choices = [a for a in announcements if a != last_announcement] or announcements
-                    pick = random.choice(choices)
-                    last_announcement = pick
-                    await self.highrise.chat(pick)
-                await asyncio.sleep(60)  # Announcements every 1 minute
-            except Exception:
-                await asyncio.sleep(10)
+                    await self.highrise.chat(announcements[index % len(announcements)])
+                    index += 1
+            except Exception as e:
+                print(f"[ANNOUNCEMENT ERROR] {e}")
+
+            remaining = next_start - asyncio.get_running_loop().time()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            else:
+                # We've fallen behind - reset the schedule instead of stacking delay
+                next_start = asyncio.get_running_loop().time()
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
         print("Management Bot Connected")
@@ -738,7 +762,7 @@ class Bot(BaseBot):
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
         if user.id == self.bot_id or "bot" in user.username.lower():
             return
-        self.room_stay_tracker[user.id] = {"username": user.username, "join_time": time.time(), "next_milestone_minutes": 5.0}
+        self.room_stay_tracker[user.id] = {"username": user.username, "join_time": time.time(), "next_milestone_minutes": 7.0}
         asyncio.create_task(self.handle_welcome_flow(user))
 
     async def on_user_leave(self, user: User) -> None:
@@ -794,9 +818,7 @@ class Bot(BaseBot):
             emote_num = int(clean_msg.strip())
             if emote_num in EMOTE_MAP:
                 emote = EMOTE_MAP[emote_num]
-                await self.stop_user_emote(user.id)
-                task = asyncio.create_task(self.loop_emote_handler(user.id, emote["id"], emote["duration"]))
-                self.active_emote_loops[user.id] = {"task": task, "emote_id": emote["id"]}
+                await self.start_emote_loop_for_user(user.id, emote["id"], emote["duration"], source="personal")
                 await self.highrise.send_whisper(user.id, f"🎭 Looping #{emote_num} ({emote['name']})! Type '!stop' to end.")
                 return
         except ValueError:
@@ -804,7 +826,7 @@ class Bot(BaseBot):
 
         # 4. Standard Commands
         if clean_msg == "!help":
-            help_text = "⚡ Commands: !list | !stop | !vip | !down | !bring @username | F1 | F2 | !dj"
+            help_text = "⚡ Commands: !list | !stop | !vip | !down | !bring @username | F1 | F2 | !dj | !allemote 1-254 (VIP) | !allstop (VIP)"
             if is_owner:
                 help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner | !removeowner | !allowners | !givedj | !removedj | !withdraw"
             await self.respond(user, help_text, source)
@@ -827,7 +849,39 @@ class Bot(BaseBot):
         elif clean_msg == "!stop":
             await self.stop_user_emote(user.id)
             return
-            
+
+        elif clean_msg.startswith("!allemote ") and (is_vip or is_owner):
+            try:
+                emote_num = int(clean_msg.split(" ")[1].strip())
+                if emote_num not in EMOTE_MAP:
+                    await self.respond(user, "❌ Invalid emote number. Use a number between 1 and 254.", source)
+                    return
+                emote = EMOTE_MAP[emote_num]
+                room_users = await self.highrise.get_room_users()
+                count = 0
+                for u, _ in room_users.content:
+                    if u.id == self.bot_id:
+                        continue
+                    # Don't override someone who's already doing their own personal emote choice
+                    existing = self.active_emote_loops.get(u.id)
+                    if existing and existing.get("source") == "personal":
+                        continue
+                    await self.start_emote_loop_for_user(u.id, emote["id"], emote["duration"], source="mass")
+                    count += 1
+                await self.respond(user, f"🎭 Started #{emote_num} ({emote['name']}) for {count} users! Type '!allstop' to stop.", source)
+            except (IndexError, ValueError):
+                await self.respond(user, "❌ Invalid format. Use: !allemote 1-254", source)
+            return
+
+        elif clean_msg == "!allstop" and (is_vip or is_owner):
+            stopped = 0
+            for uid in list(self.active_emote_loops.keys()):
+                if self.active_emote_loops[uid].get("source") == "mass":
+                    await self.stop_user_emote(uid)
+                    stopped += 1
+            await self.respond(user, f"🛑 Stopped the group emote for {stopped} users.", source)
+            return
+
         elif clean_msg == "!vip" and (is_vip or is_owner):
             try:
                 await self.highrise.teleport(user.id, random.choice(self.vip_spawn_points))
