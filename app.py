@@ -371,6 +371,50 @@ TRIVIA_QUESTIONS = [
     {"q": "What is the currency of Pakistan?", "options": ["Rupee", "Dinar", "Riyal", "Dollar"], "answer": "Rupee"},
     {"q": "How many sides does a hexagon have?", "options": ["5", "6", "7", "8"], "answer": "6"},
     {"q": "What organ pumps blood through the human body?", "options": ["Lungs", "Brain", "Heart", "Liver"], "answer": "Heart"},
+    {"q": "What is the largest country in the world by area?", "options": ["Canada", "USA", "China", "Russia"], "answer": "Russia"},
+    {"q": "What is the smallest country in the world?", "options": ["Monaco", "Vatican City", "Malta", "San Marino"], "answer": "Vatican City"},
+    {"q": "Which country is known as the Land of the Rising Sun?", "options": ["China", "Japan", "Thailand", "Korea"], "answer": "Japan"},
+    {"q": "Which country gifted the Statue of Liberty to the USA?", "options": ["Spain", "France", "Italy", "England"], "answer": "France"},
+    {"q": "What is the fastest land animal?", "options": ["Cheetah", "Lion", "Horse", "Greyhound"], "answer": "Cheetah"},
+    {"q": "Which is the largest bird in the world?", "options": ["Ostrich", "Eagle", "Albatross", "Peacock"], "answer": "Ostrich"},
+    {"q": "Which sea creature has eight arms?", "options": ["Squid", "Octopus", "Jellyfish", "Starfish"], "answer": "Octopus"},
+    {"q": "How many teeth does an adult human have?", "options": ["28", "30", "32", "34"], "answer": "32"},
+    {"q": "How many bones are in the adult human body?", "options": ["196", "206", "216", "226"], "answer": "206"},
+    {"q": "What is the chemical symbol for water?", "options": ["H2O", "CO2", "O2", "H2"], "answer": "H2O"},
+    {"q": "What is the chemical symbol for gold?", "options": ["Au", "Ag", "Gd", "Go"], "answer": "Au"},
+    {"q": "Which planet is known for its rings?", "options": ["Mars", "Saturn", "Venus", "Mercury"], "answer": "Saturn"},
+    {"q": "What is the study of stars called?", "options": ["Biology", "Astronomy", "Geology", "Chemistry"], "answer": "Astronomy"},
+    {"q": "Which instrument has 88 keys?", "options": ["Guitar", "Violin", "Piano", "Flute"], "answer": "Piano"},
+    {"q": "How many strings does a standard guitar have?", "options": ["4", "5", "6", "7"], "answer": "6"},
+    {"q": "What is the largest organ in the human body?", "options": ["Heart", "Liver", "Skin", "Brain"], "answer": "Skin"},
+    {"q": "Which vitamin do we get mainly from sunlight?", "options": ["Vitamin A", "Vitamin C", "Vitamin D", "Vitamin B"], "answer": "Vitamin D"},
+    {"q": "Which is the smallest planet in our solar system?", "options": ["Mars", "Mercury", "Venus", "Pluto"], "answer": "Mercury"},
+    {"q": "What do caterpillars turn into?", "options": ["Bees", "Butterflies", "Moths", "Beetles"], "answer": "Butterflies"},
+    {"q": "Which continent is the Sahara Desert located in?", "options": ["Asia", "Africa", "Australia", "South America"], "answer": "Africa"},
+    {"q": "What is the largest country in South America?", "options": ["Argentina", "Brazil", "Chile", "Peru"], "answer": "Brazil"},
+    {"q": "Which is the smallest continent?", "options": ["Europe", "Australia", "Antarctica", "South America"], "answer": "Australia"},
+    {"q": "What do you call a group of lions?", "options": ["Pack", "Pride", "Herd", "Flock"], "answer": "Pride"},
+    {"q": "What do you call a group of wolves?", "options": ["Pride", "Pack", "Colony", "Troop"], "answer": "Pack"},
+    {"q": "Which vegetable makes you cry when you cut it?", "options": ["Potato", "Onion", "Carrot", "Garlic"], "answer": "Onion"},
+    {"q": "What is the hardest natural substance on Earth?", "options": ["Gold", "Iron", "Diamond", "Quartz"], "answer": "Diamond"},
+    {"q": "How many colors are on a standard traffic light?", "options": ["2", "3", "4", "5"], "answer": "3"},
+    {"q": "What shape is a stop sign?", "options": ["Circle", "Square", "Octagon", "Triangle"], "answer": "Octagon"},
+    {"q": "How many sides does a pentagon have?", "options": ["4", "5", "6", "7"], "answer": "5"},
+    {"q": "How many sides does an octagon have?", "options": ["6", "7", "8", "9"], "answer": "8"},
+    {"q": "What is the capital of Spain?", "options": ["Barcelona", "Madrid", "Seville", "Valencia"], "answer": "Madrid"},
+    {"q": "What is the capital of China?", "options": ["Shanghai", "Beijing", "Hong Kong", "Guangzhou"], "answer": "Beijing"},
+    {"q": "What is the capital of India?", "options": ["Mumbai", "New Delhi", "Bangalore", "Kolkata"], "answer": "New Delhi"},
+    {"q": "What is the capital of Turkey?", "options": ["Istanbul", "Ankara", "Izmir", "Antalya"], "answer": "Ankara"},
+    {"q": "What is the capital of Egypt?", "options": ["Cairo", "Alexandria", "Giza", "Luxor"], "answer": "Cairo"},
+    {"q": "What is the capital of South Korea?", "options": ["Busan", "Seoul", "Incheon", "Daegu"], "answer": "Seoul"},
+    {"q": "What is the capital of Brazil?", "options": ["Rio de Janeiro", "Sao Paulo", "Brasilia", "Salvador"], "answer": "Brasilia"},
+    {"q": "What is the capital of Saudi Arabia?", "options": ["Jeddah", "Riyadh", "Mecca", "Medina"], "answer": "Riyadh"},
+    {"q": "What is the capital of the UAE?", "options": ["Dubai", "Abu Dhabi", "Sharjah", "Ajman"], "answer": "Abu Dhabi"},
+    {"q": "What is the capital of Bangladesh?", "options": ["Chittagong", "Dhaka", "Khulna", "Sylhet"], "answer": "Dhaka"},
+    {"q": "How many players are there in a cricket team?", "options": ["9", "10", "11", "12"], "answer": "11"},
+    {"q": "How many players are on a volleyball team on court?", "options": ["5", "6", "7", "8"], "answer": "6"},
+    {"q": "What color is the sky on a clear day?", "options": ["Green", "Blue", "Red", "Yellow"], "answer": "Blue"},
+    {"q": "What is the largest internal organ in the human body?", "options": ["Heart", "Liver", "Lungs", "Kidney"], "answer": "Liver"},
 ]
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -437,7 +481,8 @@ class Bot(BaseBot):
         self.trivia_active = False        # Is a question currently open for answers?
         self.trivia_current = None        # The question dict currently being asked
         self.trivia_winner_id = None      # Prevents a 2nd person winning the same question
-        self.trivia_recent = collections.deque(maxlen=15)  # Avoid repeating recent questions
+        self.trivia_bag = []              # Shuffled queue of question indices - refilled/reshuffled only once emptied
+        self.trivia_next_question_at = None  # Monotonic-clock timestamp of the next hourly question (for countdown display)
         self.trivia_task = None
         self.quiet_window = False         # True during a manual !trivia round's 2-min answer window
         self.delayed_commands = collections.deque()  # Commands held back during quiet_window, replayed after
@@ -701,16 +746,16 @@ class Bot(BaseBot):
                         # 2nd tip overall (1st was welcome) - 7 minutes after the 1st bonus
                         data["next_fire_time"] = data["join_time"] + 14 * 60
                     elif data["bonus_count"] == 2:
-                        # From here on, snap to fixed wall-clock 10-minute marks
-                        # (e.g. :20, :30, :40) instead of counting from this moment.
+                        # From here on, snap to fixed wall-clock 15-minute marks
+                        # (e.g. :15, :30, :45) instead of counting from this moment.
                         now_dt = datetime.fromtimestamp(now)
-                        minutes_to_add = 10 - (now_dt.minute % 10)
+                        minutes_to_add = 15 - (now_dt.minute % 15)
                         next_dt = now_dt.replace(second=0, microsecond=0) + timedelta(minutes=minutes_to_add)
                         data["next_fire_time"] = next_dt.timestamp()
                     else:
-                        # Already aligned to a 10-minute clock mark - just add exactly
-                        # 10 minutes to stay on that same alignment (e.g. :20 -> :30 -> :40).
-                        data["next_fire_time"] += 10 * 60
+                        # Already aligned to a 15-minute clock mark - just add exactly
+                        # 15 minutes to stay on that same alignment (e.g. :15 -> :30 -> :45).
+                        data["next_fire_time"] += 15 * 60
                     await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward", "1g"))
 
     async def connection_watchdog_loop(self) -> None:
@@ -776,12 +821,13 @@ class Bot(BaseBot):
                 pass
 
     async def start_announcement_loop(self) -> None:
-        announcements = [
+        static_announcements = [
             "💎 <color=#FFD700><b>TIP 500g</b></color> to the bot to unlock <color=#FF0000><b>VIP access permanently</b></color>! 👑",
             "🏢 Type <color=#FFD700><b>F1</b></color> for 1st floor, <color=#FFD700><b>F2</b></color> for 2nd floor, <color=#FFD700><b>!down</b></color> for ground floor, and <color=#FFD700><b>!vip</b></color> to teleport to the VIP lounge! 🚀",
             "🛡️ <color=#00FFFF><b>We are hiring active MODs!</b></color> Interested? DM <color=#FFD700><b>@sadi_key</b></color> 📩",
             "🎭 Type a number between <color=#FFA500><b>1</b></color> and <color=#FFA500><b>254</b></color> to perform an emote! <color=#FF0000><b>!stop</b></color> to stop the emote loop. 🕺💃"
         ]
+        total_slots = len(static_announcements) + 1  # +1 for the dynamic trivia countdown slot
         index = 0
         next_start = asyncio.get_running_loop().time()
         while True:
@@ -792,7 +838,9 @@ class Bot(BaseBot):
             try:
                 room_users = await self.highrise.get_room_users()
                 if room_users and len(room_users.content) > 1 and not self.quiet_window:
-                    await self.highrise.chat(announcements[index % len(announcements)])
+                    slot = index % total_slots
+                    text = static_announcements[slot] if slot < len(static_announcements) else self._trivia_countdown_text()
+                    await self.highrise.chat(text)
                     index += 1
             except Exception as e:
                 print(f"[ANNOUNCEMENT ERROR] {e}")
@@ -804,15 +852,29 @@ class Bot(BaseBot):
                 # We've fallen behind - reset the schedule instead of stacking delay
                 next_start = asyncio.get_running_loop().time()
 
+    def _trivia_countdown_text(self) -> str:
+        # Public reminder woven into the regular announcement rotation, showing
+        # how much time is left until the next hourly trivia question.
+        if self.trivia_active:
+            return "🧠 A <color=#FFD700><b>Trivia</b></color> question is live right now! Type the exact answer to win <color=#FFD700><b>50g</b></color>! 🏆"
+        if self.trivia_next_question_at is None:
+            return "🧠 Hourly <color=#FFD700><b>Trivia</b></color> questions are coming - answer first to win <color=#FFD700><b>50g</b></color>! 🏆"
+        remaining_seconds = self.trivia_next_question_at - asyncio.get_running_loop().time()
+        minutes_left = max(0, round(remaining_seconds / 60))
+        return (
+            f"🧠 Next <color=#FFD700><b>Trivia</b></color> question will be here in about "
+            f"<color=#FFD700><b>{minutes_left} min</b></color> - so be ready to win the prize! 🏆"
+        )
+
     def _pick_trivia_question(self) -> dict:
-        # Avoid repeating a question that was asked recently (tracked in trivia_recent).
-        choices = [q for q in TRIVIA_QUESTIONS if q["q"] not in self.trivia_recent]
-        if not choices:
-            # We've cycled through everything recently - allow repeats again.
-            choices = TRIVIA_QUESTIONS
-        question = random.choice(choices)
-        self.trivia_recent.append(question["q"])
-        return question
+        # Shuffled-bag approach: every one of the 100 questions is asked exactly
+        # once before any question repeats. Once the bag empties, it's refilled
+        # and reshuffled, and the cycle starts over.
+        if not self.trivia_bag:
+            self.trivia_bag = list(range(len(TRIVIA_QUESTIONS)))
+            random.shuffle(self.trivia_bag)
+        index = self.trivia_bag.pop()
+        return TRIVIA_QUESTIONS[index]
 
     def _format_trivia_announcement(self, question: dict) -> str:
         letters = ["A", "B", "C", "D"]
@@ -836,6 +898,7 @@ class Bot(BaseBot):
 
         while True:
             next_question_at = asyncio.get_running_loop().time() + cycle_seconds
+            self.trivia_next_question_at = next_question_at
             reminders_sent = set()
 
             # Wait out the hour, firing countdown reminders along the way.
