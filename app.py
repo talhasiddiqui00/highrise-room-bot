@@ -10,6 +10,7 @@ import random
 import asyncio
 import threading
 import requests
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from json import load, dump
@@ -607,9 +608,22 @@ class Bot(BaseBot):
                     continue
 
                 data = self.room_stay_tracker[user_id]
-                elapsed_minutes = (now - data["join_time"]) / 60.0
-                if elapsed_minutes >= data["next_milestone_minutes"]:
-                    self.room_stay_tracker[user_id]["next_milestone_minutes"] = data["next_milestone_minutes"] + 10.0
+                if now >= data["next_fire_time"]:
+                    data["bonus_count"] += 1
+                    if data["bonus_count"] == 1:
+                        # 2nd tip overall (1st was welcome) - 7 minutes after the 1st bonus
+                        data["next_fire_time"] = data["join_time"] + 14 * 60
+                    elif data["bonus_count"] == 2:
+                        # From here on, snap to fixed wall-clock 10-minute marks
+                        # (e.g. :20, :30, :40) instead of counting from this moment.
+                        now_dt = datetime.fromtimestamp(now)
+                        minutes_to_add = 10 - (now_dt.minute % 10)
+                        next_dt = now_dt.replace(second=0, microsecond=0) + timedelta(minutes=minutes_to_add)
+                        data["next_fire_time"] = next_dt.timestamp()
+                    else:
+                        # Already aligned to a 10-minute clock mark - just add exactly
+                        # 10 minutes to stay on that same alignment (e.g. :20 -> :30 -> :40).
+                        data["next_fire_time"] += 10 * 60
                     await self.tip_queue.put((user_id, "gold_bar_1", data["username"], "stay_reward", "1g"))
 
     async def connection_watchdog_loop(self) -> None:
@@ -762,7 +776,7 @@ class Bot(BaseBot):
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
         if user.id == self.bot_id or "bot" in user.username.lower():
             return
-        self.room_stay_tracker[user.id] = {"username": user.username, "join_time": time.time(), "next_milestone_minutes": 7.0}
+        self.room_stay_tracker[user.id] = {"username": user.username, "join_time": time.time(), "bonus_count": 0, "next_fire_time": time.time() + 7 * 60}
         asyncio.create_task(self.handle_welcome_flow(user))
 
     async def on_user_leave(self, user: User) -> None:
