@@ -10,6 +10,7 @@ import random
 import asyncio
 import threading
 import requests
+import collections
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
@@ -308,6 +309,70 @@ EMOTE_MAP = {
     254: {"name": "kawaiipose",       "id": "emote-kawaiipose",                 "duration": 10.0},
 }
 
+# --- TRIVIA GAME QUESTION BANK ---
+# 55 easy general-knowledge questions, 4 options each. "answer" must match one
+# of the "options" strings exactly (matching is done case-insensitively so a
+# winner typing "paris" still counts, but they must still type the full word
+# as shown in the options - not just the letter).
+TRIVIA_QUESTIONS = [
+    {"q": "What is the capital of France?", "options": ["Paris", "London", "Rome", "Berlin"], "answer": "Paris"},
+    {"q": "What is the capital of Japan?", "options": ["Seoul", "Beijing", "Tokyo", "Bangkok"], "answer": "Tokyo"},
+    {"q": "What is the capital of Italy?", "options": ["Madrid", "Rome", "Vienna", "Athens"], "answer": "Rome"},
+    {"q": "What is the capital of USA?", "options": ["New York", "Washington DC", "Chicago", "Boston"], "answer": "Washington DC"},
+    {"q": "What is the capital of Pakistan?", "options": ["Karachi", "Lahore", "Islamabad", "Peshawar"], "answer": "Islamabad"},
+    {"q": "What is the capital of England?", "options": ["Manchester", "Liverpool", "London", "Leeds"], "answer": "London"},
+    {"q": "What is the capital of Germany?", "options": ["Munich", "Berlin", "Hamburg", "Frankfurt"], "answer": "Berlin"},
+    {"q": "What is the capital of Canada?", "options": ["Toronto", "Vancouver", "Ottawa", "Montreal"], "answer": "Ottawa"},
+    {"q": "What is the capital of Australia?", "options": ["Sydney", "Melbourne", "Canberra", "Perth"], "answer": "Canberra"},
+    {"q": "What is the capital of Russia?", "options": ["Moscow", "St Petersburg", "Kyiv", "Minsk"], "answer": "Moscow"},
+    {"q": "Which planet is known as the Red Planet?", "options": ["Venus", "Mars", "Jupiter", "Saturn"], "answer": "Mars"},
+    {"q": "Which planet is closest to the Sun?", "options": ["Earth", "Venus", "Mercury", "Mars"], "answer": "Mercury"},
+    {"q": "Which is the largest planet in our solar system?", "options": ["Earth", "Saturn", "Jupiter", "Neptune"], "answer": "Jupiter"},
+    {"q": "How many planets are in our solar system?", "options": ["7", "8", "9", "10"], "answer": "8"},
+    {"q": "What gas do humans need to breathe to survive?", "options": ["Carbon Dioxide", "Oxygen", "Nitrogen", "Helium"], "answer": "Oxygen"},
+    {"q": "How many continents are there on Earth?", "options": ["5", "6", "7", "8"], "answer": "7"},
+    {"q": "What is the largest ocean on Earth?", "options": ["Atlantic Ocean", "Indian Ocean", "Arctic Ocean", "Pacific Ocean"], "answer": "Pacific Ocean"},
+    {"q": "What is the tallest mountain in the world?", "options": ["K2", "Mount Everest", "Kilimanjaro", "Denali"], "answer": "Mount Everest"},
+    {"q": "What is the longest river in the world?", "options": ["Amazon River", "Nile River", "Yangtze River", "Mississippi River"], "answer": "Nile River"},
+    {"q": "What is the largest desert in the world?", "options": ["Sahara Desert", "Gobi Desert", "Antarctic Desert", "Arabian Desert"], "answer": "Antarctic Desert"},
+    {"q": "How many days are there in a leap year?", "options": ["364", "365", "366", "367"], "answer": "366"},
+    {"q": "How many hours are there in a day?", "options": ["12", "20", "24", "36"], "answer": "24"},
+    {"q": "How many minutes are there in an hour?", "options": ["30", "45", "60", "100"], "answer": "60"},
+    {"q": "How many days are there in a week?", "options": ["5", "6", "7", "8"], "answer": "7"},
+    {"q": "How many months are there in a year?", "options": ["10", "11", "12", "13"], "answer": "12"},
+    {"q": "What color do you get by mixing blue and yellow?", "options": ["Purple", "Green", "Orange", "Pink"], "answer": "Green"},
+    {"q": "What color do you get by mixing red and white?", "options": ["Pink", "Purple", "Orange", "Brown"], "answer": "Pink"},
+    {"q": "How many colors are there in a rainbow?", "options": ["5", "6", "7", "8"], "answer": "7"},
+    {"q": "What is the freezing point of water in Celsius?", "options": ["0", "10", "32", "100"], "answer": "0"},
+    {"q": "What is the boiling point of water in Celsius?", "options": ["50", "90", "100", "212"], "answer": "100"},
+    {"q": "Which animal is known as the King of the Jungle?", "options": ["Tiger", "Elephant", "Lion", "Bear"], "answer": "Lion"},
+    {"q": "Which is the tallest animal in the world?", "options": ["Elephant", "Giraffe", "Horse", "Camel"], "answer": "Giraffe"},
+    {"q": "Which is the largest mammal in the world?", "options": ["Elephant", "Blue Whale", "Shark", "Giraffe"], "answer": "Blue Whale"},
+    {"q": "Which bird is known for its inability to fly but is a fast runner?", "options": ["Eagle", "Ostrich", "Parrot", "Sparrow"], "answer": "Ostrich"},
+    {"q": "What do bees produce?", "options": ["Milk", "Honey", "Silk", "Wax"], "answer": "Honey"},
+    {"q": "How many legs does a spider have?", "options": ["6", "8", "10", "12"], "answer": "8"},
+    {"q": "What is the national sport of Pakistan?", "options": ["Cricket", "Hockey", "Football", "Kabaddi"], "answer": "Hockey"},
+    {"q": "How many players are there in a football team on the field?", "options": ["9", "10", "11", "12"], "answer": "11"},
+    {"q": "How many players are there in a basketball team on the court?", "options": ["4", "5", "6", "7"], "answer": "5"},
+    {"q": "In which sport would you perform a slam dunk?", "options": ["Football", "Basketball", "Tennis", "Cricket"], "answer": "Basketball"},
+    {"q": "Which shape has three sides?", "options": ["Square", "Circle", "Triangle", "Rectangle"], "answer": "Triangle"},
+    {"q": "Which shape has four equal sides?", "options": ["Triangle", "Square", "Circle", "Oval"], "answer": "Square"},
+    {"q": "What is 5 plus 5?", "options": ["10", "15", "20", "25"], "answer": "10"},
+    {"q": "What is 10 multiplied by 10?", "options": ["10", "100", "1000", "20"], "answer": "100"},
+    {"q": "What is 20 divided by 4?", "options": ["4", "5", "6", "8"], "answer": "5"},
+    {"q": "What do you call a baby dog?", "options": ["Kitten", "Puppy", "Cub", "Calf"], "answer": "Puppy"},
+    {"q": "What do you call a baby cat?", "options": ["Puppy", "Kitten", "Cub", "Foal"], "answer": "Kitten"},
+    {"q": "What is the closest star to Earth?", "options": ["Polaris", "Sirius", "The Sun", "Alpha Centauri"], "answer": "The Sun"},
+    {"q": "What natural satellite orbits the Earth?", "options": ["Sun", "Mars", "Moon", "Venus"], "answer": "Moon"},
+    {"q": "Which fruit is known to keep the doctor away?", "options": ["Banana", "Apple", "Orange", "Grapes"], "answer": "Apple"},
+    {"q": "What is the main ingredient in bread?", "options": ["Rice", "Flour", "Sugar", "Salt"], "answer": "Flour"},
+    {"q": "Which language has the most native speakers in the world?", "options": ["English", "Spanish", "Mandarin Chinese", "Hindi"], "answer": "Mandarin Chinese"},
+    {"q": "What is the currency of the United States?", "options": ["Pound", "Euro", "Dollar", "Yen"], "answer": "Dollar"},
+    {"q": "What is the currency of Pakistan?", "options": ["Rupee", "Dinar", "Riyal", "Dollar"], "answer": "Rupee"},
+    {"q": "How many sides does a hexagon have?", "options": ["5", "6", "7", "8"], "answer": "6"},
+    {"q": "What organ pumps blood through the human body?", "options": ["Lungs", "Brain", "Heart", "Liver"], "answer": "Heart"},
+]
+
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/get_vips":
@@ -367,6 +432,16 @@ class Bot(BaseBot):
         self.room_stay_tracker = {}
         self.welcome_in_progress = set()  # Prevent duplicate welcome messages
         self.vip_guests = set()  # Users temporarily brought to VIP lounge via !bring
+
+        # --- TRIVIA GAME STATE ---
+        self.trivia_active = False        # Is a question currently open for answers?
+        self.trivia_current = None        # The question dict currently being asked
+        self.trivia_winner_id = None      # Prevents a 2nd person winning the same question
+        self.trivia_recent = collections.deque(maxlen=15)  # Avoid repeating recent questions
+        self.trivia_task = None
+        self.quiet_window = False         # True during a manual !trivia round's 2-min answer window
+        self.delayed_commands = collections.deque()  # Commands held back during quiet_window, replayed after
+        # --------------------------
 
     def _gist_configured(self) -> bool:
         return bool(GITHUB_TOKEN and GIST_ID)
@@ -573,6 +648,16 @@ class Bot(BaseBot):
     async def process_tip_queue_worker(self):
         while True:
             target_id, gold_bar_tier, username, reason, amount_label = await self.tip_queue.get()
+
+            # Hold every non-trivia tip (and the chat message that goes with it) while a
+            # manual !trivia round's 2-minute answer window is open, so the bot stays
+            # quiet - they're delayed, not lost, and get processed once the window closes.
+            if self.quiet_window and reason != "trivia_win":
+                await self.tip_queue.put((target_id, gold_bar_tier, username, reason, amount_label))
+                self.tip_queue.task_done()
+                await asyncio.sleep(1.0)
+                continue
+
             try:
                 await self.highrise.tip_user(target_id, gold_bar_tier)
                 if reason == "welcome":
@@ -581,6 +666,8 @@ class Bot(BaseBot):
                     await self.highrise.chat(f"⏰ @{username} have been tipped {amount_label} for staying bonus!")
                 elif reason == "manual_tip":
                     await self.highrise.chat(f"💰 @{username} have been tipped {amount_label}!")
+                elif reason == "trivia_win":
+                    await self.highrise.chat(f"🏆 Congratulations @{username} have been tipped {amount_label} for winning trivia! Try your luck in the next trivia question! 🎉")
 
                 # Every tip - welcome, stay bonus, or manual - gets a visible 4-5s gap
                 # so they always land one by one publicly, never in a rapid burst.
@@ -704,7 +791,7 @@ class Bot(BaseBot):
             next_start += 60.0
             try:
                 room_users = await self.highrise.get_room_users()
-                if room_users and len(room_users.content) > 1:
+                if room_users and len(room_users.content) > 1 and not self.quiet_window:
                     await self.highrise.chat(announcements[index % len(announcements)])
                     index += 1
             except Exception as e:
@@ -716,6 +803,143 @@ class Bot(BaseBot):
             else:
                 # We've fallen behind - reset the schedule instead of stacking delay
                 next_start = asyncio.get_running_loop().time()
+
+    def _pick_trivia_question(self) -> dict:
+        # Avoid repeating a question that was asked recently (tracked in trivia_recent).
+        choices = [q for q in TRIVIA_QUESTIONS if q["q"] not in self.trivia_recent]
+        if not choices:
+            # We've cycled through everything recently - allow repeats again.
+            choices = TRIVIA_QUESTIONS
+        question = random.choice(choices)
+        self.trivia_recent.append(question["q"])
+        return question
+
+    def _format_trivia_announcement(self, question: dict) -> str:
+        letters = ["A", "B", "C", "D"]
+        options_lines = "\n".join(f"{letters[i]}) {opt}" for i, opt in enumerate(question["options"]))
+        return (
+            "🧠 <color=#FFD700><b>TRIVIA TIME!</b></color> 🧠\n"
+            f"❓ {question['q']}\n"
+            f"{options_lines}\n"
+            "✅ Please write the EXACT answer as shown above (e.g. type \"Paris\", not \"A\") - "
+            "just type it in chat, first correct answer wins!\n"
+            "💰 Prize: 50g to the winner!"
+        )
+
+    async def trivia_loop(self) -> None:
+        # Drift-proof 60-minute cycle: each cycle we schedule the countdown
+        # reminders and the next question relative to a fixed clock, the same
+        # pattern used by start_announcement_loop, so slow API calls never
+        # push the schedule back.
+        cycle_seconds = 60 * 60
+        reminder_marks_minutes = [30, 20, 10, 5]  # minutes remaining before next question
+
+        while True:
+            next_question_at = asyncio.get_running_loop().time() + cycle_seconds
+            reminders_sent = set()
+
+            # Wait out the hour, firing countdown reminders along the way.
+            while True:
+                remaining = next_question_at - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    break
+
+                minutes_left = remaining / 60.0
+                for mark in reminder_marks_minutes:
+                    if minutes_left <= mark and mark not in reminders_sent:
+                        reminders_sent.add(mark)
+                        try:
+                            if self.quiet_window:
+                                continue
+                            room_users = await self.highrise.get_room_users()
+                            if room_users and len(room_users.content) > 1:
+                                await self.highrise.chat(
+                                    f"⏳ Get ready! Next 🧠 <b>Trivia</b> question in about <color=#FFD700><b>{mark} min</b></color> - answer first to win 50g! 🏆"
+                                )
+                        except Exception as e:
+                            print(f"[TRIVIA ERROR] Reminder failed: {e}")
+
+                # Check roughly every 30s so reminder marks aren't missed or duplicated.
+                await asyncio.sleep(min(30, max(1, remaining)))
+
+            # Time to ask a new question.
+            try:
+                if self.trivia_active:
+                    # A manual !trivia round is still running right now - skip this
+                    # cycle's automatic question rather than waiting for it to clear.
+                    # The hourly schedule itself is untouched: the loop still resets
+                    # next_question_at 60 minutes from now on the next pass, so the
+                    # regular hourly trivia keeps firing on its own fixed cadence no
+                    # matter how many manual rounds happen in between.
+                    continue
+
+                question = self._pick_trivia_question()
+                self.trivia_current = question
+                self.trivia_winner_id = None
+                self.trivia_active = True
+                room_users = await self.highrise.get_room_users()
+                if room_users and len(room_users.content) > 1:
+                    await self.highrise.chat(self._format_trivia_announcement(question))
+                else:
+                    # Nobody around to play - don't leave a stale question active.
+                    self.trivia_active = False
+            except Exception as e:
+                print(f"[TRIVIA ERROR] Failed to post question: {e}")
+                self.trivia_active = False
+
+    async def manual_trivia_command(self, owner: User, source: str) -> None:
+        if self.trivia_active:
+            await self.respond(owner, "⚠️ A trivia question is already in progress right now - wait for it to finish first.", source)
+            return
+
+        try:
+            await self.highrise.chat("🧠 Get ready! A <color=#FFD700><b>Trivia</b></color> question will be here in <b>1 min</b>! 🏆")
+        except Exception as e:
+            print(f"[TRIVIA ERROR] Manual warmup announcement failed: {e}")
+
+        await asyncio.sleep(60)
+
+        # Safety check in case the hourly automatic question slipped in during the wait.
+        if self.trivia_active:
+            return
+
+        question = self._pick_trivia_question()
+        self.trivia_current = question
+        self.trivia_winner_id = None
+        self.trivia_active = True
+        self.quiet_window = True  # Pause other announcements/tips/commands for the answer window
+
+        try:
+            await self.highrise.chat(
+                self._format_trivia_announcement(question) + "\n⏱️ You have <b>2 minutes</b> to answer!"
+            )
+        except Exception as e:
+            print(f"[TRIVIA ERROR] Manual question post failed: {e}")
+
+        # 2-minute answer window - ends early the moment someone answers correctly
+        # (command_handler sets trivia_active to False as soon as a winner is found).
+        for _ in range(120):
+            if not self.trivia_active:
+                break
+            await asyncio.sleep(1)
+
+        if self.trivia_active:
+            # Time ran out with no correct answer.
+            self.trivia_active = False
+            self.trivia_current = None
+            try:
+                await self.highrise.chat(
+                    f"⏰ Time's up! Nobody answered correctly. The answer was: <b>{question['answer']}</b>. Try again next time!"
+                )
+            except Exception as e:
+                print(f"[TRIVIA ERROR] Manual timeout announcement failed: {e}")
+
+        # Reopen the room: release the quiet window and replay anything held back.
+        self.quiet_window = False
+        pending = list(self.delayed_commands)
+        self.delayed_commands.clear()
+        for held_user, held_message, held_source in pending:
+            asyncio.create_task(self.command_handler(held_user, held_message, held_source))
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
         print("Management Bot Connected")
@@ -738,7 +962,11 @@ class Bot(BaseBot):
         asyncio.create_task(self.anti_idle_loop())
         asyncio.create_task(self.bot_position_watchdog_loop())
         asyncio.create_task(self.gist_sync_loop())
-        
+
+        # Start trivia loop safely (same duplication-guard pattern as announcements)
+        if self.trivia_task is None or self.trivia_task.done():
+            self.trivia_task = asyncio.create_task(self.trivia_loop())
+
         # Start announcement loop safely
         if self.announcement_task is None or self.announcement_task.done():
             self.announcement_task = asyncio.create_task(self.start_announcement_loop())
@@ -812,6 +1040,19 @@ class Bot(BaseBot):
             return
 
         clean_msg = message.lower().strip()
+
+        # 1b. QUIET WINDOW GATE: while a manual !trivia round's 2-minute answer
+        # window is open, every command is held back and replayed once it closes -
+        # EXCEPT the live trivia answer itself, which always needs to go through
+        # immediately so the first correct responder can actually win.
+        is_live_trivia_answer = (
+            self.trivia_active
+            and self.trivia_current is not None
+            and clean_msg == self.trivia_current["answer"].lower().strip()
+        )
+        if self.quiet_window and not is_live_trivia_answer:
+            self.delayed_commands.append((user, message, source))
+            return
         
         # 2. DEBOUNCE LOCK: Prevent identical commands within 2.5 seconds
         now = time.time()
@@ -827,6 +1068,18 @@ class Bot(BaseBot):
         is_owner = (user.username.lower() == self.owner_username.lower()) or (user.id in self.extra_owners) or (user.id == self.bot_id)
         is_vip = (user.id in self.vip_users)
 
+        # 2b. TRIVIA ANSWER CHECK: if a question is open, the first person to type
+        # the exact answer text (case-insensitive) wins 50g. Commands (starting
+        # with "!") are ignored here so they still fall through to the logic below.
+        if self.trivia_active and self.trivia_current and self.trivia_winner_id is None and not clean_msg.startswith("!"):
+            correct_answer = self.trivia_current["answer"].lower().strip()
+            if clean_msg == correct_answer:
+                self.trivia_winner_id = user.id
+                self.trivia_active = False
+                self.trivia_current = None
+                await self.tip_queue.put((user.id, TIP_MAP["50g"], user.username, "trivia_win", "50g"))
+                return
+
         # 3. Handle Emote Triggering by number
         try:
             emote_num = int(clean_msg.strip())
@@ -840,9 +1093,9 @@ class Bot(BaseBot):
 
         # 4. Standard Commands
         if clean_msg == "!help":
-            help_text = "⚡ Commands: !list | !stop | !vip | !down | !bring @username | F1 | F2 | !dj | !allemote 1-254 (VIP) | !allstop (VIP)"
+            help_text = "⚡ Commands: !list | !stop | !vip | !down | !bring @username | F1 | F2 | !dj | !allemote 1-254 (VIP) | !allstop (VIP) | 🧠 Hourly Trivia: type the exact answer to win 50g!"
             if is_owner:
-                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner | !removeowner | !allowners | !givedj | !removedj | !withdraw"
+                help_text += " | !owner | !set | !top | !bal | !allvips | !giveall | !give | !givevip | !removevip | !giveowner | !removeowner | !allowners | !givedj | !removedj | !withdraw | !trivia"
             await self.respond(user, help_text, source)
             return
 
@@ -956,6 +1209,13 @@ class Bot(BaseBot):
 
         # --- EVERYTHING BELOW THIS LINE IS OWNER ONLY ---
         if not is_owner:
+            return
+
+        if clean_msg == "!trivia":
+            # Runs as a background task (not awaited here) since it spans a 1-min
+            # warmup + up to a 2-min answer window - awaiting it directly would
+            # block the bot from processing any other incoming chat during that time.
+            asyncio.create_task(self.manual_trivia_command(user, source))
             return
 
         if clean_msg.startswith("!giveowner ") and user.username.lower() == self.owner_username.lower():
