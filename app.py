@@ -309,6 +309,10 @@ EMOTE_MAP = {
     254: {"name": "kawaiipose",       "id": "emote-kawaiipose",                 "duration": 10.0},
 }
 
+# How long any trivia question (automatic hourly or manual !trivia) stays open
+# for answers before the bot reveals the answer and closes the round.
+TRIVIA_ANSWER_WINDOW_SECONDS = 30
+
 # --- TRIVIA GAME QUESTION BANK ---
 # 55 easy general-knowledge questions, 4 options each. "answer" must match one
 # of the "options" strings exactly (matching is done case-insensitively so a
@@ -415,6 +419,26 @@ TRIVIA_QUESTIONS = [
     {"q": "How many players are on a volleyball team on court?", "options": ["5", "6", "7", "8"], "answer": "6"},
     {"q": "What color is the sky on a clear day?", "options": ["Green", "Blue", "Red", "Yellow"], "answer": "Blue"},
     {"q": "What is the largest internal organ in the human body?", "options": ["Heart", "Liver", "Lungs", "Kidney"], "answer": "Liver"},
+    {"q": "How many teeth does an adult human normally have?", "options": ["28", "30", "32", "34"], "answer": "32"},
+    {"q": "What is the largest bone in the human body?", "options": ["Skull", "Femur", "Spine", "Pelvis"], "answer": "Femur"},
+    {"q": "What is the main language spoken in Brazil?", "options": ["Spanish", "Portuguese", "French", "Italian"], "answer": "Portuguese"},
+    {"q": "Which vitamin do we mainly get from sunlight?", "options": ["Vitamin A", "Vitamin C", "Vitamin D", "Vitamin B12"], "answer": "Vitamin D"},
+    {"q": "What is the study of stars and planets called?", "options": ["Biology", "Astronomy", "Geology", "Chemistry"], "answer": "Astronomy"},
+    {"q": "How many wheels does a standard bicycle have?", "options": ["1", "2", "3", "4"], "answer": "2"},
+    {"q": "What is the primary color you get by mixing red and blue?", "options": ["Green", "Purple", "Orange", "Brown"], "answer": "Purple"},
+    {"q": "Which sense do we use to detect smell?", "options": ["Sight", "Hearing", "Smell", "Taste"], "answer": "Smell"},
+    {"q": "What is the name of Earth's only natural satellite?", "options": ["Mars", "The Sun", "The Moon", "Titan"], "answer": "The Moon"},
+    {"q": "What do plants need, along with water and sunlight, to grow?", "options": ["Sand", "Carbon Dioxide", "Salt", "Iron"], "answer": "Carbon Dioxide"},
+    {"q": "What is the opposite of hot?", "options": ["Warm", "Cold", "Mild", "Dry"], "answer": "Cold"},
+    {"q": "How many zeros are in one thousand?", "options": ["2", "3", "4", "5"], "answer": "3"},
+    {"q": "What do you call frozen rain?", "options": ["Sleet", "Hail", "Snow", "Fog"], "answer": "Snow"},
+    {"q": "Which meal is typically eaten in the morning?", "options": ["Lunch", "Dinner", "Breakfast", "Supper"], "answer": "Breakfast"},
+    {"q": "What is the name for a shape with five sides?", "options": ["Hexagon", "Pentagon", "Octagon", "Square"], "answer": "Pentagon"},
+    {"q": "What do you call baby cows?", "options": ["Calves", "Kids", "Foals", "Lambs"], "answer": "Calves"},
+    {"q": "What is the largest species of big cat?", "options": ["Lion", "Tiger", "Leopard", "Jaguar"], "answer": "Tiger"},
+    {"q": "Which meal is typically eaten at midday?", "options": ["Breakfast", "Lunch", "Dinner", "Brunch"], "answer": "Lunch"},
+    {"q": "What is the name of the layer of gases surrounding Earth?", "options": ["Crust", "Atmosphere", "Core", "Mantle"], "answer": "Atmosphere"},
+    {"q": "What do you call water that has turned to solid ice?", "options": ["Steam", "Vapor", "Ice", "Liquid"], "answer": "Ice"},
 ]
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -889,6 +913,30 @@ class Bot(BaseBot):
             "💰 Prize: 50g to the winner!"
         )
 
+    async def _run_trivia_answer_window(self) -> None:
+        # Shared by both the automatic hourly question and the manual !trivia
+        # question. Waits up to TRIVIA_ANSWER_WINDOW_SECONDS, ending early the
+        # instant someone answers correctly (command_handler flips trivia_active
+        # to False the moment that happens). This is the piece that guarantees
+        # a round can NEVER get stuck "active" forever with no winner - which is
+        # exactly what was blocking every question after the first unanswered one.
+        for _ in range(TRIVIA_ANSWER_WINDOW_SECONDS):
+            if not self.trivia_active:
+                return
+            await asyncio.sleep(1)
+
+        if self.trivia_active:
+            # Time ran out with no correct answer - reveal it and close the round.
+            answer = self.trivia_current["answer"] if self.trivia_current else "?"
+            self.trivia_active = False
+            self.trivia_current = None
+            try:
+                await self.highrise.chat(
+                    f"⏰ Time's up! Nobody answered correctly. The answer was: <b>{answer}</b>. Better luck next time to win! 🍀"
+                )
+            except Exception as e:
+                print(f"[TRIVIA ERROR] Timeout announcement failed: {e}")
+
     async def trivia_loop(self) -> None:
         # Drift-proof 60-minute cycle: each cycle we schedule the countdown
         # reminders and the next question relative to a fixed clock, the same
@@ -944,10 +992,15 @@ class Bot(BaseBot):
                 self.trivia_active = True
                 room_users = await self.highrise.get_room_users()
                 if room_users and len(room_users.content) > 1:
-                    await self.highrise.chat(self._format_trivia_announcement(question))
+                    await self.highrise.chat(
+                        self._format_trivia_announcement(question)
+                        + f"\n⏱️ You have <b>{TRIVIA_ANSWER_WINDOW_SECONDS} seconds</b> to answer!"
+                    )
+                    await self._run_trivia_answer_window()
                 else:
                     # Nobody around to play - don't leave a stale question active.
                     self.trivia_active = False
+                    self.trivia_current = None
             except Exception as e:
                 print(f"[TRIVIA ERROR] Failed to post question: {e}")
                 self.trivia_active = False
@@ -979,28 +1032,13 @@ class Bot(BaseBot):
 
         try:
             await self.highrise.chat(
-                self._format_trivia_announcement(question) + "\n⏱️ You have <b>1 minute</b> to answer!"
+                self._format_trivia_announcement(question)
+                + f"\n⏱️ You have <b>{TRIVIA_ANSWER_WINDOW_SECONDS} seconds</b> to answer!"
             )
         except Exception as e:
             print(f"[TRIVIA ERROR] Manual question post failed: {e}")
 
-        # 1-minute (60s) answer window - ends early the moment someone answers correctly
-        # (command_handler sets trivia_active to False as soon as a winner is found).
-        for _ in range(60):
-            if not self.trivia_active:
-                break
-            await asyncio.sleep(1)
-
-        if self.trivia_active:
-            # Time ran out with no correct answer.
-            self.trivia_active = False
-            self.trivia_current = None
-            try:
-                await self.highrise.chat(
-                    f"⏰ Time's up! Nobody answered correctly. The answer was: <b>{question['answer']}</b>. Try again next time!"
-                )
-            except Exception as e:
-                print(f"[TRIVIA ERROR] Manual timeout announcement failed: {e}")
+        await self._run_trivia_answer_window()
 
         # Reopen the room: release the quiet window and replay anything held back.
         self.quiet_window = False
